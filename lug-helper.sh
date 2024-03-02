@@ -138,6 +138,7 @@ install_path="drive_c/Program Files/Roberts Space Industries/$sc_base_dir"
 live_dir="LIVE"
 ptu_dir="PTU"
 eptu_dir="EPTU"
+tech_preview_dir="TECH-PREVIEW"
 
 # Location in the WINE prefix where shaders are stored
 appdata_path="drive_c/users/$USER/AppData/Local/Star Citizen"
@@ -167,6 +168,14 @@ else
     install_script="$helper_dir/lib/lutris-starcitizen.json"
 fi
 
+# Use protonfix installed by a packaged version of this script if available
+# Otherwise, default to the protonfix in the lib directory
+if [ -f "$(dirname "$helper_dir")/share/lug-helper/ulwgl-starcitizen.py" ]; then
+    protonfix="$(dirname "$helper_dir")/share/lug-helper/ulwgl-starcitizen.py"
+else
+    protonfix="$helper_dir/lib/ulwgl-starcitizen.py"
+fi
+
 ######## Runners ###########################################################
 
 # Lutris native wine runners directory
@@ -182,6 +191,22 @@ runners_dir_flatpak="$lutris_flatpak_dir/data/lutris/runners/wine"
 runner_sources=(
     "GloriousEggroll" "https://api.github.com/repos/GloriousEggroll/wine-ge-custom/releases"
     "RawFox" "https://api.github.com/repos/starcitizen-lug/raw-wine/releases"
+)
+
+######## ULWGL #############################################################
+
+# ULWGL native proton directory
+ulwgl_dir_native="$data_dir/Steam/compatibilitytools.d"
+# ULWGL flatpak proton directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
+ulwgl_dir_flatpak="$lutris_flatpak_dir/Steam/compatibilitytools.d"
+
+# URLs for downloading ULWGL proton
+# Elements in this array must be added in quoted pairs of: "description" "url"
+# The first string in the pair is expected to contain the runner description
+# The second is expected to contain the api releases url
+# ie. "Open Wine Components" "https://github.com/Open-Wine-Components/ULWGL-Proton/releases"
+ulwgl_sources=(
+    "Open Wine Components" "https://api.github.com/repos/Open-Wine-Components/ULWGL-Proton/releases"
 )
 
 ######## DXVK ##############################################################
@@ -686,6 +711,8 @@ getdirs() {
     dxvk_cache="$game_path/$game_version/StarCitizen.dxvk-cache"
     # Where to store backed up keybinds
     backup_path="$conf_dir/$conf_subdir"
+    # Protonfixes directory
+    protonfixes_dir="$conf_dir/protonfixes/localfixes/"
 }
 
 
@@ -1107,6 +1134,16 @@ get_lutris_dirs() {
                 lutris_dirs+=("flatpak" "$runners_dir_flatpak")
             fi
             ;;
+        "ulwgl")
+            # Native Lutris install
+            if [ "$lutris_native" = "true" ]; then
+                lutris_dirs+=("native" "$ulwgl_dir_native")
+            fi
+            # Flatpak lutris install
+            if [ "$lutris_flatpak" = "true" ]; then
+                lutris_dirs+=("flatpak" "$ulwgl_dir_flatpak")
+            fi
+            ;;
         "dxvk")
             # Native Lutris install
             if [ "$lutris_native" = "true" ]; then
@@ -1217,6 +1254,148 @@ post_download() {
     fi
 }
 
+# Deploy custom protonfix
+install_protonfix() {
+    # This function expects at least one index number for the array installed_items to be passed in as an argument
+    if [ -z "$1" ]; then
+        debug_print exit "Script error:  The install_protonfix function expects an argument. Aborting."
+    fi
+
+    # Sanity checks
+    if [ -z "$download_type" ]; then
+        debug_print exit "Script error: The string 'download_type' was not set\nbefore calling the install_protonfix function. Aborting."
+    elif [ "${#installed_items[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_items' was not set\nbefore calling the install_protonfix function. Aborting."
+    elif [ "${#installed_item_names[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_item_names' was not set\nbefore calling the install_protonfix function. Aborting."
+    fi
+
+    post_download_msg_heading="Install Complete"
+    post_download_msg="Custom LUG protonfix installed to selected proton versions"
+
+    # Get/set directory paths
+    getdirs
+
+    # Capture arguments and format a list of items
+    install_target=("$@")
+    unset list_to_install
+    unset installed_item_names
+    unset ulwgl_proton
+    for (( i=0; i<"${#install_target[@]}"; i++ )); do
+        list_to_install+="\n${installed_items[${install_target[i]}]}"
+    done
+
+    if message question "Are you sure you want to install custom LUG protonfix to the following ${download_type}(s)?\n$list_to_install"; then
+        # Loop through the arguments
+        for (( i=0; i<"${#install_target[@]}"; i++ )); do
+
+            #do the install here
+            mkdir -p "$protonfixes_dir"
+            cp "$protonfix" "$protonfixes_dir"
+
+            ulwgl_proton=${installed_items[${install_target[i]}]}
+            # #setup user_settings file
+            cp "$ulwgl_proton/user_settings.sample.py" "$ulwgl_proton/user_settings.py"
+            # #configure user_settings file to enable custom protonfix
+            echo "import protonfixes" >> "$ulwgl_proton/user_settings.py"
+
+            debug_print continue "Installed protonfix in ${installed_items[${install_target[i]}]}"
+
+            # Store the names of Installed items for post_download() processing
+            installed_item_names+=("${installed_item_names[${install_target[i]}]}")
+        done
+        # Mark success for triggering post-deletion actions
+        post_download_type="info"
+        download_action_success="installed"
+    fi
+}
+
+# List installed ULWGL for protonfix installation Called by download_manage()
+#
+# The following variables are expected to be set before calling this function:
+# - download_type (string)
+# - download_dirs (array)
+proton_select_protonfix() {
+    # Sanity checks
+    if [ -z "$download_type" ]; then
+        debug_print exit "Script error: The string 'download_type' was not set\nbefore calling the download_select_delete function. Aborting."
+    elif [ "${#download_dirs[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'download_dirs' was not set\nbefore calling the download_select_delete function. Aborting."
+    fi
+
+    # Configure the menu
+    menu_text_zenity="Add custom LUG protonfix to $download_type(s):"
+    menu_text_terminal="Add custom LUG protonfix to $download_type(s):"
+    menu_text_height="60"
+    menu_type="checklist"
+    goback="Return to the $download_type management menu"
+    unset installed_items
+    unset installed_item_names
+    unset menu_options
+    unset menu_actions
+    unset filter_keyword
+
+    #ULWGL stores some configuration boilerplate in compatibilitytools.d and must be filtered
+    case "$download_type" in
+        "ulwgl")
+            debug_print continue "function download_select_delete download type ULWGL-Proton filter"
+            filter_keyword="Proton"
+            ;;
+        *)
+            debug_print continue "function download_select_delete download type no filter"
+            ;;
+    esac
+
+    # Find all installed items in the download destinations
+    for (( i=1; i<"${#download_dirs[@]}"; i=i+2 )); do
+        # Loop through all download destinations
+        # Odd numbered elements will contain the download destination's path
+        for item in "${download_dirs[i]}"/*; do
+            if [ -d "$item" ]; then
+                if [[ "$item" != *"$filter_keyword"* ]]; then
+                    debug_print continue "$item filtered by match on $filter_keyword"
+                else
+                    if [ "${#download_dirs[@]}" -eq 2 ]; then
+                        # We're deleting from one location
+                        installed_item_names+=("$(basename "$item")")
+                    else
+                        # We're deleting from multiple locations so label each one
+                        installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
+                    fi
+                    installed_items+=("$item")
+                fi
+            fi
+        done
+    done
+
+    # Create menu options for the installed items
+    for (( i=0; i<"${#installed_items[@]}"; i++ )); do
+        menu_options+=("${installed_item_names[i]}")
+        menu_actions+=("install_protonfix $i")
+    done
+
+    # Complete the menu by adding the option to go back to the previous menu
+    menu_options+=("$goback")
+    menu_actions+=(":") # no-op
+
+    # Calculate the total height the menu should be
+    # menu_option_height = pixels per menu option
+    # #menu_options[@] = number of menu options
+    # menu_text_height = height of the title/description text
+    # menu_text_height_zenity4 = added title/description height for libadwaita bigness
+    menu_height="$(($menu_option_height * ${#menu_options[@]} + $menu_text_height + $menu_text_height_zenity4))"
+    # Cap menu height
+    if [ "$menu_height" -gt "$menu_height_max" ]; then
+        menu_height="$menu_height_max"
+    fi
+
+    # Set the label for the cancel button
+    cancel_label="Go Back"
+
+    # Call the menu function.  It will use the options as configured above
+    menu
+}
+
 # Uninstall the selected item(s). Called by download_select_install()
 # Accepts array index numbers as an argument
 #
@@ -1250,7 +1429,7 @@ download_delete() {
     if message question "Are you sure you want to delete the following ${download_type}(s)?\n$list_to_delete"; then
         # Loop through the arguments
         for (( i=0; i<"${#item_to_delete[@]}"; i++ )); do
-            rm -r "${installed_items[${item_to_delete[i]}]}"
+            rm -r --interactive=never "${installed_items[${item_to_delete[i]}]}"
             debug_print continue "Deleted ${installed_items[${item_to_delete[i]}]}"
 
             # Store the names of deleted items for post_download() processing
@@ -1284,6 +1463,18 @@ download_select_delete() {
     unset installed_item_names
     unset menu_options
     unset menu_actions
+    unset filter_keyword
+
+    #ULWGL stores some configuration boilerplate in compatibilitytools.d and must be filtered
+    case "$download_type" in
+        "ulwgl")
+            debug_print continue "function download_select_delete download type ULWGL-Proton filter"
+            filter_keyword="Proton"
+            ;;
+        *)
+            debug_print continue "function download_select_delete download type no filter"
+            ;;
+    esac
 
     # Find all installed items in the download destinations
     for (( i=1; i<"${#download_dirs[@]}"; i=i+2 )); do
@@ -1291,14 +1482,18 @@ download_select_delete() {
         # Odd numbered elements will contain the download destination's path
         for item in "${download_dirs[i]}"/*; do
             if [ -d "$item" ]; then
-                if [ "${#download_dirs[@]}" -eq 2 ]; then
-                    # We're deleting from one location
-                    installed_item_names+=("$(basename "$item")")
+                if [[ "$item" != *"$filter_keyword"* ]]; then
+                    debug_print continue "$item filtered by match on $filter_keyword"
                 else
-                    # We're deleting from multiple locations so label each one
-                    installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
+                    if [ "${#download_dirs[@]}" -eq 2 ]; then
+                        # We're deleting from one location
+                        installed_item_names+=("$(basename "$item")")
+                    else
+                        # We're deleting from multiple locations so label each one
+                        installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
+                    fi
+                    installed_items+=("$item")
                 fi
-                installed_items+=("$item")
             fi
         done
     done
@@ -1480,7 +1675,7 @@ download_install() {
             if [ -d "${download_dirs[i]}/$download_name" ]; then
                 # This item has already been installed. Delete it before reinstalling
                 debug_print continue "$download_type exists, deleting ${download_dirs[i]}/$download_name..."
-                rm -r "${download_dirs[i]:?}/$download_name"
+                rm -r --interactive=never "${download_dirs[i]:?}/$download_name"
                 debug_print continue "Reinstalling $download_type into ${download_dirs[i]}/$download_name..."
             else
                 debug_print continue "Installing $download_type into ${download_dirs[i]}/$download_name..."
@@ -1507,7 +1702,7 @@ download_install() {
             if [ -d "${download_dirs[i]}/$download_name" ]; then
                 # This item has already been installed. Delete it before reinstalling
                 debug_print continue "$download_type exists, deleting ${download_dirs[i]}/$download_name..."
-                rm -r "${download_dirs[i]:?}/$download_name"
+                rm -r --interactive=never "${download_dirs[i]:?}/$download_name"
                 debug_print continue "Reinstalling $download_type into ${download_dirs[i]}/$download_name..."
             else
                 debug_print continue "Installing $download_type into ${download_dirs[i]}/$download_name..."
@@ -1533,7 +1728,7 @@ download_install() {
     # Cleanup tmp download
     debug_print continue "Cleaning up $tmp_dir/$download_file..."
     rm "${tmp_dir:?}/$download_file"
-    rm -r "${tmp_dir:?}/$download_name"
+    rm -r --interactive=never "${tmp_dir:?}/$download_name"
 }
 
 # List available items for download. Called by download_manage()
@@ -1844,6 +2039,7 @@ download_manage() {
         menu_type="radiolist"
 
         # Configure the menu options
+        proton_select_protonfix="Install LUG protonfix"
         delete="Remove an installed $download_type"
         back="Return to the main menu"
         unset menu_options
@@ -1860,6 +2056,11 @@ download_manage() {
             # Set the corresponding functions to be called for each of the options
             menu_actions+=("download_select_install $i")
         done
+
+        if [ $download_type == "ulwgl" ]; then
+            menu_options+=("$proton_select_protonfix")
+            menu_actions+=("proton_select_protonfix")
+        fi
 
         # Complete the menu by adding options to uninstall an item
         # or go back to the previous menu
@@ -1926,6 +2127,48 @@ runner_manage() {
     # The argument passed to the function is used for special handling
     # and displayed in the menus and dialogs.
     download_manage "runner"
+}
+
+# Configure the download_manage function for runners
+ulwgl_manage() {
+    # Lutris will need to be configured and restarted after modifying ulwgl
+    # Valid options are "none", "info", or "configure-lutris"
+    post_download_type="info"
+
+    # Use indirect expansion to point download_sources
+    # to the ulwgl_sources array set at the top of the script
+    declare -n download_sources=ulwgl_sources
+
+    # Check if Lutris is installed and get relevant directories
+    get_lutris_dirs "ulwgl"
+    if [ "$lutris_installed" = "false" ]; then
+        message warning "Lutris is required but does not appear to be installed."
+        return 0
+    fi
+    # Point download_dirs to the lutris_dirs array set by get_lutris_dirs
+    # Must be formatted in pairs of ("[type]" "[directory]")
+    declare -n download_dirs=lutris_dirs
+
+    # Configure the text displayed in the menus
+    download_menu_heading="ULWGL Proton"
+    download_menu_description="ULWGL Proton Versions"
+    download_menu_height="140"
+
+    # Configure the post download message
+    # Format:
+    # A header is automatically displayed that reads: Download Complete
+    # post_download_msg is displayed below the header
+    post_download_msg_heading="Download Complete"
+    post_download_msg="Would you like to automatically configure Lutris to use this ULWGL Proton?\n\nLutris will be restarted if necessary."
+    # Set the string sed will match against when editing Lutris yml configs
+    # This will be used to detect the appropriate yml key and replace its value
+    # with the name of the downloaded item
+    post_download_sed_string="version: "
+
+    # Call the download_manage function with the above configuration
+    # The argument passed to the function is used for special handling
+    # and displayed in the menus and dialogs.
+    download_manage "ulwgl"
 }
 
 # Configure the download_manage function for dxvks
@@ -2000,9 +2243,9 @@ version_menu(){
     goback="Cancel"
 
     # Set the options to be displayed in the menu
-    menu_options=("LIVE" "PTU" "EPTU" "$goback")
+    menu_options=("LIVE" "PTU" "EPTU" "TECH-PREVIEW" "$goback")
     # Set the corresponding functions to be called for each of the options
-    menu_actions=("set_version $live_dir" "set_version $ptu_dir" "set_version $eptu_dir" ":")
+    menu_actions=("set_version $live_dir" "set_version $ptu_dir" "set_version $eptu_dir" "set_version $tech_preview_dir" ":")
 
     # Calculate the total height the menu should be
     # menu_option_height = pixels per menu option
@@ -2151,6 +2394,18 @@ display_dirs() {
         fi
         if [ -d "$runners_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
             dirs_list+="\n$runners_dir_flatpak"
+        fi
+        dirs_list+="\n\n"
+    fi
+
+    # ULWGL Proton
+    if [ -d "$ulwgl_dir_native" ] || [ -d "$ulwgl_dir_flatpak" ]; then
+        dirs_list+="ULWGL Proton:"
+        if [ -d "$ulwgl_dir_native" ] && [ "$lutris_native" = "true" ]; then
+            dirs_list+="\n$ulwgl_dir_native"
+        fi
+        if [ -d "$ulwgl_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
+            dirs_list+="\n$ulwgl_dir_flatpak"
         fi
         dirs_list+="\n\n"
     fi
@@ -2476,6 +2731,7 @@ Usage: lug-helper <options>
   -i, --install                 Install Star Citizen
   -e, --eac                     Deploy Easy Anti-Cheat Workaround
   -m, --manage-runners          Install or remove Lutris runners
+  -l, --manage-ulwgl            Install or remove ULWGL Proton versions
   -k, --manage-dxvk             Install or remove DXVK versions
   -u, --delete-user-folder      Delete Star Citizen USER dir, preserve keybinds
   -s, --delete-shaders          Delete Star Citizen shaders
@@ -2502,6 +2758,9 @@ Usage: lug-helper <options>
             --manage-runners | -m )
                 cargs+=("runner_manage")
                 ;;
+            --manage-ulwgl | -m )
+                cargs+=("ulwgl_manage")
+                ;;
             --manage-dxvk | -k )
                 cargs+=("dxvk_manage")
                 ;;
@@ -2522,6 +2781,8 @@ Usage: lug-helper <options>
                     game_version="$ptu_dir"
                 elif [ "$game_version" = "eptu" ] || [ "$game_version" = "EPTU" ]; then
                     game_version="$eptu_dir"
+                elif [ "$game_version" = "tech_preview" ] || [ "$game_version" = "TECH-PREVIEW" ]; then
+                    game_version="$tech_preview_dir"
                 else
                     printf "$0: Invalid argument '%s'\n" "$game_version"
                     exit 0
@@ -2612,15 +2873,16 @@ while true; do
     preflight_msg="Preflight Check (System Optimization)"
     install_msg="Install Star Citizen"
     runners_msg="Manage Lutris Runners"
+    ulwgl_msg="Manage ULWGL Proton"
     dxvk_msg="Manage Lutris DXVK Versions"
     maintenance_msg="Maintenance and Troubleshooting"
     randomizer_msg="Get a random Penguin's Star Citizen referral code"
     quit_msg="Quit"
 
     # Set the options to be displayed in the menu
-    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
+    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$ulwgl_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
     # Set the corresponding functions to be called for each of the options
-    menu_actions=("preflight_check" "install_game" "runner_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
+    menu_actions=("preflight_check" "install_game" "runner_manage" "ulwgl_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
 
     # Calculate the total height the menu should be
     # menu_option_height = pixels per menu option
