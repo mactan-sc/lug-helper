@@ -209,6 +209,17 @@ ulwgl_sources=(
     "Open Wine Components" "https://api.github.com/repos/Open-Wine-Components/ULWGL-Proton/releases"
 )
 
+######## protonfix #######################################################
+
+# ULWGL protonfixes directory
+protonfix_dir_native="$conf_dir//protonfixes/localfixes"
+# ULWGL protonfixes directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
+protonfix_dir_flatpak="$conf_dir/protonfixes/localfixes"
+
+protonfix_sources=(
+    "Open Wine Components" "$protonfix"
+)
+
 ######## DXVK ##############################################################
 
 # Lutris native dxvk directory
@@ -1144,6 +1155,16 @@ get_lutris_dirs() {
                 lutris_dirs+=("flatpak" "$ulwgl_dir_flatpak")
             fi
             ;;
+        "protonfix")
+            # Native Lutris install
+            if [ "$lutris_native" = "true" ]; then
+                lutris_dirs+=("native" "$ulwgl_dir_native")
+            fi
+            # Flatpak lutris install
+            if [ "$lutris_flatpak" = "true" ]; then
+                lutris_dirs+=("flatpak" "$ulwgl_dir_flatpak")
+            fi
+            ;;
         "dxvk")
             # Native Lutris install
             if [ "$lutris_native" = "true" ]; then
@@ -1160,6 +1181,389 @@ get_lutris_dirs() {
             exit 0
             ;;
     esac
+}
+
+post_install() {
+        # Sanity checks
+    if [ -z "$post_local_type" ]; then
+        debug_print exit "Script error: The string 'post_local_type' was not set\nbefore calling the post_local function. Aborting."
+    elif [ -z "$post_local_msg_heading" ]; then
+        debug_print exit "Script error: The string 'post_local_msg_heading' was not set\nbefore calling the post_local function. Aborting."
+    elif [ -z "$post_local_msg" ]; then
+        debug_print exit "Script error: The string 'post_local_msg' was not set\nbefore calling the post_local function. Aborting."
+    elif [ -z "$post_local_sed_string" ] && [ "$post_local_type" = "configure-lutris" ]; then
+        debug_print exit "Script error: The string 'post_local_sed_string' was not set\nbefore calling the post_local function. Aborting."
+    fi
+
+    # Configure the message heading and format it for zenity
+    if [ "$use_zenity" -eq 1 ]; then
+        post_local_msg_heading="<b>$post_local_msg_heading</b>"
+    fi
+
+    # Display appropriate post-local message
+    if [ "$post_local_type" = "info" ]; then
+            # Just displaying an informational message
+            message info "$post_local_msg_heading\n\n$post_local_msg"
+    elif [ "$post_local_type" = "configure-lutris" ]; then
+        # We need to configure and restart Lutris
+        unset lutris_game_ymls
+        # Build an array of all Lutris Star Citizen yml files
+        while IFS='' read -r line; do
+            lutris_game_ymls+=("$line")
+        done < <(grep -iRlE --include="*.yml" "Roberts Space Industries|starcitizen|star citizen|star-citizen" "$lutris_native_conf_dir" "$lutris_flatpak_conf_dir" 2>/dev/null)
+
+        # We handle installs and deletions differently
+        if [ "$local_action_success" = "installed" ]; then
+            # We are installing something for Lutris
+            if message question "$post_local_msg_heading\n\n$post_local_msg"; then
+                # Cylce through all Lutris config files for Star Citizen and configure the localed item
+                for (( i=0; i<"${#lutris_game_ymls[@]}"; i++ )); do
+                    # Replace the appropriate key:value line if it exists
+                    sed -Ei "/^wine:/,/^[^[:blank:]]/ {/^[[:blank:]]*${post_local_sed_string}/s/${post_local_sed_string}.*/${post_local_sed_string}${localed_item_name}/}" "${lutris_game_ymls[i]}"
+
+                    # If it doesn't exist, add it at the start of the wine: grouping
+                    if ! grep -q "${post_local_sed_string}${localed_item_name}" "${lutris_game_ymls[i]}"; then
+                        # This assumes an indent of two spaces before the key:value pair
+                        sed -i -e '/^wine:/a\' -e "  ${post_local_sed_string}${localed_item_name}" "${lutris_game_ymls[i]}"
+                    fi
+                done
+
+                # Lutris needs to be restarted after making changes
+                if [ "$(pgrep -f lutris)" ]; then
+                    # For installations, we ask the user if we can configure and restart Lutris in the post_local_msg
+                    lutris_restart
+                fi
+            fi
+        elif [ "$local_action_success" = "deleted" ]; then
+            # Find all Star Citizen Lutris configs and delete the matching key:value line
+            for (( i=0; i<"${#deleted_item_names[@]}"; i++ )); do
+                # Cylce through all Lutris config files for Star Citizen and remove the item
+                for (( j=0; j<"${#lutris_game_ymls[@]}"; j++ )); do
+                    sed -Ei "/^wine:/,/^[^[:blank:]]/ {/${post_local_sed_string}${deleted_item_names[i]}/d}" "${lutris_game_ymls[j]}"
+                done
+            done
+
+            # Lutris needs to be restarted after making changes
+            if [ "$(pgrep -f lutris)" ] && message question "Lutris must be restarted to detect the changes.\nWould you like this Helper to restart it for you?"; then
+                # For deletions, we ask the user if it's okay to restart Lutris here
+                lutris_restart
+            fi
+        else
+            debug_print exit "Script error: Unknown local_action_success value in post_local function. Aborting."
+        fi
+    else
+            debug_print exit "Script error: Unknown post_local_type value in post_local function. Aborting."
+    fi
+}
+
+local_delete() {
+    # This function expects at least one index number for the array installed_items to be passed in as an argument
+    if [ -z "$1" ]; then
+        debug_print exit "Script error:  The local_delete function expects an argument. Aborting."
+    fi
+
+    # Sanity checks
+    if [ -z "$local_type" ]; then
+        debug_print exit "Script error: The string 'local_type' was not set\nbefore calling the local_delete function. Aborting."
+    elif [ "${#installed_items[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_items' was not set\nbefore calling the local_delete function. Aborting."
+    elif [ "${#installed_item_names[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_item_names' was not set\nbefore calling the local_delete function. Aborting."
+    fi
+
+    # Capture arguments and format a list of items
+    item_to_delete=("$@")
+    unset list_to_delete
+    unset deleted_item_names
+    for (( i=0; i<"${#item_to_delete[@]}"; i++ )); do
+        list_to_delete+="\n${installed_items[${item_to_delete[i]}]}"
+    done
+
+    if message question "Are you sure you want to delete the following ${local_type}(s)?\n$list_to_delete"; then
+        # Loop through the arguments
+        for (( i=0; i<"${#item_to_delete[@]}"; i++ )); do
+
+            sed -i '/import protonfixes/d' "${installed_items[${item_to_delete[i]}]}/user_settings.py"
+
+            debug_print continue "Deleted ${installed_items[${item_to_delete[i]}]}"
+
+            # Store the names of deleted items for post_local() processing
+            deleted_item_names+=("${installed_item_names[${item_to_delete[i]}]}")
+        done
+        # Mark success for triggering post-deletion actions
+        local_action_success="deleted"
+    fi
+}
+
+local_select_delete() {
+    # Sanity checks
+    if [ -z "$local_type" ]; then
+        debug_print exit "Script error: The string 'local_type' was not set\nbefore calling the local_select_delete function. Aborting."
+    elif [ "${#local_dirs[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'local_dirs' was not set\nbefore calling the local_select_delete function. Aborting."
+    fi
+
+    # Configure the menu
+    menu_text_zenity="Add custom LUG protonfix to $local_type(s):"
+    menu_text_terminal="Add custom LUG protonfix to $local_type(s):"
+    menu_text_height="60"
+    menu_type="checklist"
+    goback="Return to the $local_type management menu"
+    unset installed_items
+    unset installed_item_names
+    unset menu_options
+    unset menu_actions
+    unset filter_keyword
+
+    # Find all installed items in the local destinations
+    for (( i=1; i<"${#local_dirs[@]}"; i=i+2 )); do
+        # Loop through all local destinations
+        # Odd numbered elements will contain the local destination's path
+        for item in "${local_dirs[i]}"/*; do
+            if [ -d "$item" ]; then
+                # Handle ulwgl specialness here
+                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"ULWGL-Launcher" ]]; then
+                    continue;
+                fi
+
+                if [ "${#local_dirs[@]}" -eq 2 ]; then
+                    # We're deleting from one location
+                    installed_item_names+=("$(basename "$item")")
+                else
+                    # We're deleting from multiple locations so label each one
+                    installed_item_names+=("$(basename "$item    [${local_dirs[i-1]}]")")
+                fi
+                installed_items+=("$item")
+        fi
+        done
+    done
+
+    # Create menu options for the installed items
+    for (( i=0; i<"${#installed_items[@]}"; i++ )); do
+        menu_options+=("${installed_item_names[i]}")
+        menu_actions+=("local_delete $i")
+    done
+
+    # Complete the menu by adding the option to go back to the previous menu
+    menu_options+=("$goback")
+    menu_actions+=(":") # no-op
+
+    # Calculate the total height the menu should be
+    # menu_option_height = pixels per menu option
+    # #menu_options[@] = number of menu options
+    # menu_text_height = height of the title/description text
+    # menu_text_height_zenity4 = added title/description height for libadwaita bigness
+    menu_height="$(($menu_option_height * ${#menu_options[@]} + $menu_text_height + $menu_text_height_zenity4))"
+    # Cap menu height
+    if [ "$menu_height" -gt "$menu_height_max" ]; then
+        menu_height="$menu_height_max"
+    fi
+
+    # Set the label for the cancel button
+    cancel_label="Go Back"
+
+    # Call the menu function.  It will use the options as configured above
+    menu
+}
+
+local_install() {
+    # This function expects at least one index number for the array installed_items to be passed in as an argument
+    if [ -z "$1" ]; then
+        debug_print exit "Script error:  The install_protonfix function expects an argument. Aborting."
+    fi
+
+    # Sanity checks
+    if [ -z "$local_type" ]; then
+        debug_print exit "Script error: The string 'local_type' was not set\nbefore calling the install_protonfix function. Aborting."
+    elif [ "${#installed_items[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_items' was not set\nbefore calling the install_protonfix function. Aborting."
+    elif [ "${#installed_item_names[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'installed_item_names' was not set\nbefore calling the install_protonfix function. Aborting."
+    fi
+
+    post_local_msg_heading="Install Complete"
+    post_local_msg="Custom LUG protonfix installed to selected proton versions"
+
+    # Get/set directory paths
+    getdirs
+
+    # Capture arguments and format a list of items
+    install_target=("$@")
+    unset list_to_install
+    unset installed_item_names
+    unset ulwgl_proton
+    for (( i=0; i<"${#install_target[@]}"; i++ )); do
+        list_to_install+="\n${installed_items[${install_target[i]}]}"
+    done
+
+    if message question "Are you sure you want to install custom LUG protonfix to the following ${local_type}(s)?\n$list_to_install"; then
+        # Loop through the arguments
+        for (( i=0; i<"${#install_target[@]}"; i++ )); do
+
+            #do the install here
+            mkdir -p "$protonfixes_dir"
+            cp "$protonfix" "$protonfixes_dir"
+
+            ulwgl_proton=${installed_items[${install_target[i]}]}
+            # #setup user_settings file
+            cp "$ulwgl_proton/user_settings.sample.py" "$ulwgl_proton/user_settings.py"
+            # #configure user_settings file to enable custom protonfix
+            echo "import protonfixes" >> "$ulwgl_proton/user_settings.py"
+
+            debug_print continue "Installed protonfix in ${installed_items[${install_target[i]}]}"
+
+            # Store the names of Installed items for post_local() processing
+            installed_item_names+=("${installed_item_names[${install_target[i]}]}")
+        done
+        # Mark success for triggering post-deletion actions
+        post_local_type="info"
+        local_action_success="installed"
+    fi
+}
+
+local_select_install() {
+    # Sanity checks
+    if [ -z "$local_type" ]; then
+        debug_print exit "Script error: The string 'local_type' was not set\nbefore calling the local_select_delete function. Aborting."
+    elif [ "${#local_dirs[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'local_dirs' was not set\nbefore calling the local_select_delete function. Aborting."
+    fi
+
+    # Configure the menu
+    menu_text_zenity="Install $local_type(s):"
+    menu_text_terminal="Install $local_type(s):"
+    menu_text_height="60"
+    menu_type="checklist"
+    goback="Return to the $local_type management menu"
+    unset installed_items
+    unset installed_item_names
+    unset menu_options
+    unset menu_actions
+    unset filter_keyword
+
+    # Find all installed items in the local destinations
+    for (( i=1; i<"${#local_dirs[@]}"; i=i+2 )); do
+        # Loop through all local destinations
+        # Odd numbered elements will contain the local destination's path
+        for item in "${local_dirs[i]}"/*; do
+            if [ -d "$item" ]; then
+                # Handle ulwgl specialness here
+                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"ULWGL-Launcher" ]]; then
+                    continue;
+                fi
+
+                if [ "${#local_dirs[@]}" -eq 2 ]; then
+                    # We're installing to one location
+                    installed_item_names+=("$(basename "$item")")
+                else
+                    # We're installing to multiple locations so label each one
+                    installed_item_names+=("$(basename "$item    [${local_dirs[i-1]}]")")
+                fi
+                installed_items+=("$item")
+        fi
+        done
+    done
+
+    # Create menu options for the installed items
+    for (( i=0; i<"${#installed_items[@]}"; i++ )); do
+        menu_options+=("${installed_item_names[i]}")
+        menu_actions+=("local_install $i")
+    done
+
+    # Complete the menu by adding the option to go back to the previous menu
+    menu_options+=("$goback")
+    menu_actions+=(":") # no-op
+
+    # Calculate the total height the menu should be
+    # menu_option_height = pixels per menu option
+    # #menu_options[@] = number of menu options
+    # menu_text_height = height of the title/description text
+    # menu_text_height_zenity4 = added title/description height for libadwaita bigness
+    menu_height="$(($menu_option_height * ${#menu_options[@]} + $menu_text_height + $menu_text_height_zenity4))"
+    # Cap menu height
+    if [ "$menu_height" -gt "$menu_height_max" ]; then
+        menu_height="$menu_height_max"
+    fi
+
+    # Set the label for the cancel button
+    cancel_label="Go Back"
+
+    # Call the menu function.  It will use the options as configured above
+    menu
+}
+
+local_manage() {
+    # This function expects a string to be passed as an argument
+    if [ -z "$1" ]; then
+        debug_print exit "Script error:  The local_manage function expects a string argument. Aborting."
+    fi
+
+    # Sanity checks
+    if [ -z "$local_sources" ]; then
+        debug_print exit "Script error: The string 'local_sources' was not set\nbefore calling the local_manage function. Aborting."
+    elif [ "${#local_dirs[@]}" -eq 0 ]; then
+        debug_print exit "Script error: The array 'local_dirs' was not set\nbefore calling the local_manage function. Aborting."
+    elif [ -z "$local_menu_heading" ]; then
+        debug_print exit "Script error: The string 'local_menu_heading' was not set\nbefore calling the local_manage function. Aborting."
+    elif [ -z "$local_menu_description" ]; then
+        debug_print exit "Script error: The string 'local_menu_description' was not set\nbefore calling the local_manage function. Aborting."
+    elif [ -z "$local_menu_height" ]; then
+        debug_print exit "Script error: The string 'local_menu_height' was not set\nbefore calling the local_manage function. Aborting."
+    fi
+
+    # Get the type of item we're localing from the function arguments
+    local_type="$1"
+
+    # The local management menu will loop until the user cancels
+    looping_menu="true"
+    while [ "$looping_menu" = "true" ]; do
+        # Configure the menu
+        menu_text_zenity="<b><big>Manage Your $local_menu_heading</big>\n\n$local_menu_description</b>\n\nYou may choose from the following options:"
+        menu_text_terminal="Manage Your $local_menu_heading\n\n$local_menu_description\nYou may choose from the following options:"
+        menu_text_height="$local_menu_height"
+        menu_type="radiolist"
+
+        # Configure the menu options
+        delete="Remove an installed $local_type"
+        back="Return to the main menu"
+        unset menu_options
+        unset menu_actions
+
+        # Initialize success
+        unset local_action_success
+
+        # Loop through the local_sources array and create a menu item
+        # for each one. Even numbered elements will contain the item name
+        for (( i=0; i<"${#local_sources[@]}"; i=i+2 )); do
+            # Set the options to be displayed in the menu
+            menu_options+=("Install a $local_type from ${local_sources[i]}")
+            # Set the corresponding functions to be called for each of the options
+            menu_actions+=("local_select_install $i")
+        done
+
+        # Complete the menu by adding options to uninstall an item
+        # or go back to the previous menu
+        menu_options+=("$delete" "$back")
+        menu_actions+=("local_select_delete" "menu_loop_done")
+
+        # Calculate the total height the menu should be
+        # menu_option_height = pixels per menu option
+        # #menu_options[@] = number of menu options
+        # menu_text_height = height of the title/description text
+        # menu_text_height_zenity4 = added title/description height for libadwaita bigness
+        menu_height="$(($menu_option_height * ${#menu_options[@]} + $menu_text_height + $menu_text_height_zenity4))"
+
+        # Set the label for the cancel button
+        cancel_label="Go Back"
+
+        # Call the menu function.  It will use the options as configured above
+        menu
+
+        # Perform post-local actions and display messages or instructions
+        if [ -n "$local_action_success" ] && [ "$post_local_type" != "none" ]; then
+            post_install
+        fi
+    done
 }
 
 # Perform post-download actions or display a message/instructions
@@ -1254,148 +1658,6 @@ post_download() {
     fi
 }
 
-# Deploy custom protonfix
-install_protonfix() {
-    # This function expects at least one index number for the array installed_items to be passed in as an argument
-    if [ -z "$1" ]; then
-        debug_print exit "Script error:  The install_protonfix function expects an argument. Aborting."
-    fi
-
-    # Sanity checks
-    if [ -z "$download_type" ]; then
-        debug_print exit "Script error: The string 'download_type' was not set\nbefore calling the install_protonfix function. Aborting."
-    elif [ "${#installed_items[@]}" -eq 0 ]; then
-        debug_print exit "Script error: The array 'installed_items' was not set\nbefore calling the install_protonfix function. Aborting."
-    elif [ "${#installed_item_names[@]}" -eq 0 ]; then
-        debug_print exit "Script error: The array 'installed_item_names' was not set\nbefore calling the install_protonfix function. Aborting."
-    fi
-
-    post_download_msg_heading="Install Complete"
-    post_download_msg="Custom LUG protonfix installed to selected proton versions"
-
-    # Get/set directory paths
-    getdirs
-
-    # Capture arguments and format a list of items
-    install_target=("$@")
-    unset list_to_install
-    unset installed_item_names
-    unset ulwgl_proton
-    for (( i=0; i<"${#install_target[@]}"; i++ )); do
-        list_to_install+="\n${installed_items[${install_target[i]}]}"
-    done
-
-    if message question "Are you sure you want to install custom LUG protonfix to the following ${download_type}(s)?\n$list_to_install"; then
-        # Loop through the arguments
-        for (( i=0; i<"${#install_target[@]}"; i++ )); do
-
-            #do the install here
-            mkdir -p "$protonfixes_dir"
-            cp "$protonfix" "$protonfixes_dir"
-
-            ulwgl_proton=${installed_items[${install_target[i]}]}
-            # #setup user_settings file
-            cp "$ulwgl_proton/user_settings.sample.py" "$ulwgl_proton/user_settings.py"
-            # #configure user_settings file to enable custom protonfix
-            echo "import protonfixes" >> "$ulwgl_proton/user_settings.py"
-
-            debug_print continue "Installed protonfix in ${installed_items[${install_target[i]}]}"
-
-            # Store the names of Installed items for post_download() processing
-            installed_item_names+=("${installed_item_names[${install_target[i]}]}")
-        done
-        # Mark success for triggering post-deletion actions
-        post_download_type="info"
-        download_action_success="installed"
-    fi
-}
-
-# List installed ULWGL for protonfix installation Called by download_manage()
-#
-# The following variables are expected to be set before calling this function:
-# - download_type (string)
-# - download_dirs (array)
-proton_select_protonfix() {
-    # Sanity checks
-    if [ -z "$download_type" ]; then
-        debug_print exit "Script error: The string 'download_type' was not set\nbefore calling the download_select_delete function. Aborting."
-    elif [ "${#download_dirs[@]}" -eq 0 ]; then
-        debug_print exit "Script error: The array 'download_dirs' was not set\nbefore calling the download_select_delete function. Aborting."
-    fi
-
-    # Configure the menu
-    menu_text_zenity="Add custom LUG protonfix to $download_type(s):"
-    menu_text_terminal="Add custom LUG protonfix to $download_type(s):"
-    menu_text_height="60"
-    menu_type="checklist"
-    goback="Return to the $download_type management menu"
-    unset installed_items
-    unset installed_item_names
-    unset menu_options
-    unset menu_actions
-    unset filter_keyword
-
-    #ULWGL stores some configuration boilerplate in compatibilitytools.d and must be filtered
-    case "$download_type" in
-        "ulwgl")
-            debug_print continue "function download_select_delete download type ULWGL-Proton filter"
-            filter_keyword="Proton"
-            ;;
-        *)
-            debug_print continue "function download_select_delete download type no filter"
-            ;;
-    esac
-
-    # Find all installed items in the download destinations
-    for (( i=1; i<"${#download_dirs[@]}"; i=i+2 )); do
-        # Loop through all download destinations
-        # Odd numbered elements will contain the download destination's path
-        for item in "${download_dirs[i]}"/*; do
-            if [ -d "$item" ]; then
-                if [[ "$item" != *"$filter_keyword"* ]]; then
-                    debug_print continue "$item filtered by match on $filter_keyword"
-                else
-                    if [ "${#download_dirs[@]}" -eq 2 ]; then
-                        # We're deleting from one location
-                        installed_item_names+=("$(basename "$item")")
-                    else
-                        # We're deleting from multiple locations so label each one
-                        installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
-                    fi
-                    installed_items+=("$item")
-                fi
-            fi
-        done
-    done
-
-    # Create menu options for the installed items
-    for (( i=0; i<"${#installed_items[@]}"; i++ )); do
-        menu_options+=("${installed_item_names[i]}")
-        menu_actions+=("install_protonfix $i")
-    done
-
-    # Complete the menu by adding the option to go back to the previous menu
-    menu_options+=("$goback")
-    menu_actions+=(":") # no-op
-
-    # Calculate the total height the menu should be
-    # menu_option_height = pixels per menu option
-    # #menu_options[@] = number of menu options
-    # menu_text_height = height of the title/description text
-    # menu_text_height_zenity4 = added title/description height for libadwaita bigness
-    menu_height="$(($menu_option_height * ${#menu_options[@]} + $menu_text_height + $menu_text_height_zenity4))"
-    # Cap menu height
-    if [ "$menu_height" -gt "$menu_height_max" ]; then
-        menu_height="$menu_height_max"
-    fi
-
-    # Set the label for the cancel button
-    cancel_label="Go Back"
-
-    # Call the menu function.  It will use the options as configured above
-    menu
-}
-
 # Uninstall the selected item(s). Called by download_select_install()
 # Accepts array index numbers as an argument
 #
@@ -1465,35 +1727,20 @@ download_select_delete() {
     unset menu_actions
     unset filter_keyword
 
-    #ULWGL stores some configuration boilerplate in compatibilitytools.d and must be filtered
-    case "$download_type" in
-        "ulwgl")
-            debug_print continue "function download_select_delete download type ULWGL-Proton filter"
-            filter_keyword="Proton"
-            ;;
-        *)
-            debug_print continue "function download_select_delete download type no filter"
-            ;;
-    esac
-
     # Find all installed items in the download destinations
     for (( i=1; i<"${#download_dirs[@]}"; i=i+2 )); do
         # Loop through all download destinations
         # Odd numbered elements will contain the download destination's path
         for item in "${download_dirs[i]}"/*; do
             if [ -d "$item" ]; then
-                if [[ "$item" != *"$filter_keyword"* ]]; then
-                    debug_print continue "$item filtered by match on $filter_keyword"
+                if [ "${#download_dirs[@]}" -eq 2 ]; then
+                    # We're deleting from one location
+                    installed_item_names+=("$(basename "$item")")
                 else
-                    if [ "${#download_dirs[@]}" -eq 2 ]; then
-                        # We're deleting from one location
-                        installed_item_names+=("$(basename "$item")")
-                    else
-                        # We're deleting from multiple locations so label each one
-                        installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
-                    fi
-                    installed_items+=("$item")
+                    # We're deleting from multiple locations so label each one
+                    installed_item_names+=("$(basename "$item    [${download_dirs[i-1]}]")")
                 fi
+                installed_items+=("$item")
             fi
         done
     done
@@ -1945,13 +2192,13 @@ download_select_install() {
             # We're installing to multiple locations
             if [ "${#installed_types[@]}" -gt 0 ]; then
                 # The file is already installed
-                menu_option_text="$download_name    [installed:"
+                menu_option_text="$download_name    [installed]"
                 for (( j=0; j<"${#installed_types[@]}"; j++ )); do
                     # Add labels for each installed location
                     menu_option_text="$menu_option_text ${installed_types[j]}"
                 done
                 # Complete the menu text
-                menu_option_text="$menu_option_text]"
+                menu_option_text="[$menu_option_text]"
             else
                 # The file is not installed
                 menu_option_text="$download_name"
@@ -2039,7 +2286,6 @@ download_manage() {
         menu_type="radiolist"
 
         # Configure the menu options
-        proton_select_protonfix="Install LUG protonfix"
         delete="Remove an installed $download_type"
         back="Return to the main menu"
         unset menu_options
@@ -2056,11 +2302,6 @@ download_manage() {
             # Set the corresponding functions to be called for each of the options
             menu_actions+=("download_select_install $i")
         done
-
-        if [ $download_type == "ulwgl" ]; then
-            menu_options+=("$proton_select_protonfix")
-            menu_actions+=("proton_select_protonfix")
-        fi
 
         # Complete the menu by adding options to uninstall an item
         # or go back to the previous menu
@@ -2129,7 +2370,7 @@ runner_manage() {
     download_manage "runner"
 }
 
-# Configure the download_manage function for runners
+# Configure the download_manage function for ulwgl
 ulwgl_manage() {
     # Lutris will need to be configured and restarted after modifying ulwgl
     # Valid options are "none", "info", or "configure-lutris"
@@ -2169,6 +2410,47 @@ ulwgl_manage() {
     # The argument passed to the function is used for special handling
     # and displayed in the menus and dialogs.
     download_manage "ulwgl"
+}
+
+fixes_manage() {
+    # Lutris will need to be configured and restarted after modifying ulwgl
+    # Valid options are "none", "info", or "configure-lutris"
+    post_local_type="info"
+
+    # Use indirect expansion to point local_sources
+    # to the ulwgl_sources array set at the top of the script
+    declare -n local_sources=protonfix_sources
+
+    # Check if Lutris is installed and get relevant directories
+    get_lutris_dirs "protonfix"
+    if [ "$lutris_installed" = "false" ]; then
+        message warning "Lutris is required but does not appear to be installed."
+        return 0
+    fi
+    # Point local_dirs to the lutris_dirs array set by get_lutris_dirs
+    # Must be formatted in pairs of ("[type]" "[directory]")
+    declare -n local_dirs=lutris_dirs
+
+    # Configure the text displayed in the menus
+    local_menu_heading="ULWGL Protonfixes"
+    local_menu_description="ULWGL Protonfixes"
+    local_menu_height="140"
+
+    # Configure the post local message
+    # Format:
+    # A header is automatically displayed that reads: local Complete
+    # post_local_msg is displayed below the header
+    post_local_msg_heading="local Complete"
+    post_local_msg="Would you like to automatically configure Lutris to use this ULWGL Proton?\n\nLutris will be restarted if necessary."
+    # Set the string sed will match against when editing Lutris yml configs
+    # This will be used to detect the appropriate yml key and replace its value
+    # with the name of the localed item
+    post_local_sed_string="version: "
+
+    # Call the local_manage function with the above configuration
+    # The argument passed to the function is used for special handling
+    # and displayed in the menus and dialogs.
+    local_manage "protonfix"
 }
 
 # Configure the download_manage function for dxvks
@@ -2406,6 +2688,18 @@ display_dirs() {
         fi
         if [ -d "$ulwgl_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
             dirs_list+="\n$ulwgl_dir_flatpak"
+        fi
+        dirs_list+="\n\n"
+    fi
+
+    # ULWGL Protonfix
+    if [ -d "$protonfix_dir_native" ] || [ -d "$protonfix_dir_flatpak" ]; then
+        dirs_list+="ULWGL Protonfix:"
+        if [ -d "$protonfix_dir_native" ] && [ "$lutris_native" = "true" ]; then
+            dirs_list+="\n$protonfix_dir_native"
+        fi
+        if [ -d "$protonfix_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
+            dirs_list+="\n$protonfix_dir_flatpak"
         fi
         dirs_list+="\n\n"
     fi
@@ -2732,6 +3026,7 @@ Usage: lug-helper <options>
   -e, --eac                     Deploy Easy Anti-Cheat Workaround
   -m, --manage-runners          Install or remove Lutris runners
   -l, --manage-ulwgl            Install or remove ULWGL Proton versions
+  -f, --manage-fixes            Install or remove ULWGL Proton fixes
   -k, --manage-dxvk             Install or remove DXVK versions
   -u, --delete-user-folder      Delete Star Citizen USER dir, preserve keybinds
   -s, --delete-shaders          Delete Star Citizen shaders
@@ -2760,6 +3055,9 @@ Usage: lug-helper <options>
                 ;;
             --manage-ulwgl | -m )
                 cargs+=("ulwgl_manage")
+                ;;
+            --manage-fixes | -m )
+                cargs+=("fixes_manage")
                 ;;
             --manage-dxvk | -k )
                 cargs+=("dxvk_manage")
@@ -2874,15 +3172,16 @@ while true; do
     install_msg="Install Star Citizen"
     runners_msg="Manage Lutris Runners"
     ulwgl_msg="Manage ULWGL Proton"
+    fixes_msg="Manage ULWGL Protonfixes"
     dxvk_msg="Manage Lutris DXVK Versions"
     maintenance_msg="Maintenance and Troubleshooting"
     randomizer_msg="Get a random Penguin's Star Citizen referral code"
     quit_msg="Quit"
 
     # Set the options to be displayed in the menu
-    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$ulwgl_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
+    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$ulwgl_msg" "$fixes_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
     # Set the corresponding functions to be called for each of the options
-    menu_actions=("preflight_check" "install_game" "runner_manage" "ulwgl_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
+    menu_actions=("preflight_check" "install_game" "runner_manage" "ulwgl_manage" "fixes_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
 
     # Calculate the total height the menu should be
     # menu_option_height = pixels per menu option
