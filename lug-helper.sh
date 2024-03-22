@@ -170,10 +170,10 @@ fi
 
 # Use protonfix installed by a packaged version of this script if available
 # Otherwise, default to the protonfix in the lib directory
-if [ -f "$(dirname "$helper_dir")/share/lug-helper/ulwgl-starcitizen.py" ]; then
-    protonfix="$(dirname "$helper_dir")/share/lug-helper/ulwgl-starcitizen.py"
+if [ -f "$(dirname "$helper_dir")/share/lug-helper/umu-starcitizen.py" ]; then
+    protonfix="$(dirname "$helper_dir")/share/lug-helper/umu-starcitizen.py"
 else
-    protonfix="$helper_dir/lib/ulwgl-starcitizen.py"
+    protonfix="$helper_dir/lib/umu-starcitizen.py"
 fi
 
 ######## Runners ###########################################################
@@ -193,27 +193,27 @@ runner_sources=(
     "RawFox" "https://api.github.com/repos/starcitizen-lug/raw-wine/releases"
 )
 
-######## ULWGL #############################################################
+######## umu #############################################################
 
-# ULWGL native proton directory
-ulwgl_dir_native="$data_dir/Steam/compatibilitytools.d"
-# ULWGL flatpak proton directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
-ulwgl_dir_flatpak="$lutris_flatpak_dir/Steam/compatibilitytools.d"
+# umu native proton directory
+umu_dir_native="$data_dir/Steam/compatibilitytools.d"
+# umu flatpak proton directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
+umu_dir_flatpak="$lutris_flatpak_dir/Steam/compatibilitytools.d"
 
-# URLs for downloading ULWGL proton
+# URLs for downloading umu proton
 # Elements in this array must be added in quoted pairs of: "description" "url"
 # The first string in the pair is expected to contain the runner description
 # The second is expected to contain the api releases url
-# ie. "Open Wine Components" "https://github.com/Open-Wine-Components/ULWGL-Proton/releases"
-ulwgl_sources=(
-    "Open Wine Components" "https://api.github.com/repos/Open-Wine-Components/ULWGL-Proton/releases"
+# ie. "Open Wine Components" "https://github.com/Open-Wine-Components/umu-Proton/releases"
+umu_sources=(
+    "Open Wine Components" "https://api.github.com/repos/Open-Wine-Components/umu-Proton/releases"
 )
 
 ######## protonfix #######################################################
 
-# ULWGL protonfixes directory
+# umu protonfixes directory
 protonfix_dir_native="$conf_dir//protonfixes/localfixes"
-# ULWGL protonfixes directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
+# umu protonfixes directory PLACEHOLDER UNTIL LUTRIS FLATPAK 5.17
 protonfix_dir_flatpak="$conf_dir/protonfixes/localfixes"
 
 protonfix_sources=(
@@ -1145,24 +1145,24 @@ get_lutris_dirs() {
                 lutris_dirs+=("flatpak" "$runners_dir_flatpak")
             fi
             ;;
-        "ulwgl")
+        "umu")
             # Native Lutris install
             if [ "$lutris_native" = "true" ]; then
-                lutris_dirs+=("native" "$ulwgl_dir_native")
+                lutris_dirs+=("native" "$umu_dir_native")
             fi
             # Flatpak lutris install
             if [ "$lutris_flatpak" = "true" ]; then
-                lutris_dirs+=("flatpak" "$ulwgl_dir_flatpak")
+                lutris_dirs+=("flatpak" "$umu_dir_flatpak")
             fi
             ;;
         "protonfix")
             # Native Lutris install
             if [ "$lutris_native" = "true" ]; then
-                lutris_dirs+=("native" "$ulwgl_dir_native")
+                lutris_dirs+=("native" "$umu_dir_native")
             fi
             # Flatpak lutris install
             if [ "$lutris_flatpak" = "true" ]; then
-                lutris_dirs+=("flatpak" "$ulwgl_dir_flatpak")
+                lutris_dirs+=("flatpak" "$umu_dir_flatpak")
             fi
             ;;
         "dxvk")
@@ -1321,8 +1321,8 @@ local_select_delete() {
         # Odd numbered elements will contain the local destination's path
         for item in "${local_dirs[i]}"/*; do
             if [ -d "$item" ]; then
-                # Handle ulwgl specialness here
-                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"ULWGL-Launcher" ]]; then
+                # Handle umu specialness here
+                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"umu-launcher" ]]; then
                     continue;
                 fi
 
@@ -1391,7 +1391,7 @@ local_install() {
     install_target=("$@")
     unset list_to_install
     unset installed_item_names
-    unset ulwgl_proton
+    unset umu_proton
     for (( i=0; i<"${#install_target[@]}"; i++ )); do
         list_to_install+="\n${installed_items[${install_target[i]}]}"
     done
@@ -1404,11 +1404,11 @@ local_install() {
             mkdir -p "$protonfixes_dir"
             cp "$protonfix" "$protonfixes_dir"
 
-            ulwgl_proton=${installed_items[${install_target[i]}]}
+            umu_proton=${installed_items[${install_target[i]}]}
             # #setup user_settings file
-            cp "$ulwgl_proton/user_settings.sample.py" "$ulwgl_proton/user_settings.py"
+            cp "$umu_proton/user_settings.sample.py" "$umu_proton/user_settings.py"
             # #configure user_settings file to enable custom protonfix
-            echo "import protonfixes" >> "$ulwgl_proton/user_settings.py"
+            echo "import protonfixes" >> "$umu_proton/user_settings.py"
 
             debug_print continue "Installed protonfix in ${installed_items[${install_target[i]}]}"
 
@@ -1447,8 +1447,8 @@ local_select_install() {
         # Odd numbered elements will contain the local destination's path
         for item in "${local_dirs[i]}"/*; do
             if [ -d "$item" ]; then
-                # Handle ulwgl specialness here
-                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"ULWGL-Launcher" ]]; then
+                # Handle umu specialness here
+                if [ "$local_type" = "protonfix" ] && [[ "$item" = *"umu-launcher" ]]; then
                     continue;
                 fi
 
@@ -2370,18 +2370,18 @@ runner_manage() {
     download_manage "runner"
 }
 
-# Configure the download_manage function for ulwgl
-ulwgl_manage() {
-    # Lutris will need to be configured and restarted after modifying ulwgl
+# Configure the download_manage function for umu
+umu_manage() {
+    # Lutris will need to be configured and restarted after modifying umu
     # Valid options are "none", "info", or "configure-lutris"
     post_download_type="info"
 
     # Use indirect expansion to point download_sources
-    # to the ulwgl_sources array set at the top of the script
-    declare -n download_sources=ulwgl_sources
+    # to the umu_sources array set at the top of the script
+    declare -n download_sources=umu_sources
 
     # Check if Lutris is installed and get relevant directories
-    get_lutris_dirs "ulwgl"
+    get_lutris_dirs "umu"
     if [ "$lutris_installed" = "false" ]; then
         message warning "Lutris is required but does not appear to be installed."
         return 0
@@ -2391,8 +2391,8 @@ ulwgl_manage() {
     declare -n download_dirs=lutris_dirs
 
     # Configure the text displayed in the menus
-    download_menu_heading="ULWGL Proton"
-    download_menu_description="ULWGL Proton Versions"
+    download_menu_heading="umu Proton"
+    download_menu_description="umu Proton Versions"
     download_menu_height="140"
 
     # Configure the post download message
@@ -2400,7 +2400,7 @@ ulwgl_manage() {
     # A header is automatically displayed that reads: Download Complete
     # post_download_msg is displayed below the header
     post_download_msg_heading="Download Complete"
-    post_download_msg="Would you like to automatically configure Lutris to use this ULWGL Proton?\n\nLutris will be restarted if necessary."
+    post_download_msg="Would you like to automatically configure Lutris to use this umu Proton?\n\nLutris will be restarted if necessary."
     # Set the string sed will match against when editing Lutris yml configs
     # This will be used to detect the appropriate yml key and replace its value
     # with the name of the downloaded item
@@ -2409,16 +2409,16 @@ ulwgl_manage() {
     # Call the download_manage function with the above configuration
     # The argument passed to the function is used for special handling
     # and displayed in the menus and dialogs.
-    download_manage "ulwgl"
+    download_manage "umu"
 }
 
 fixes_manage() {
-    # Lutris will need to be configured and restarted after modifying ulwgl
+    # Lutris will need to be configured and restarted after modifying umu
     # Valid options are "none", "info", or "configure-lutris"
     post_local_type="info"
 
     # Use indirect expansion to point local_sources
-    # to the ulwgl_sources array set at the top of the script
+    # to the umu_sources array set at the top of the script
     declare -n local_sources=protonfix_sources
 
     # Check if Lutris is installed and get relevant directories
@@ -2432,8 +2432,8 @@ fixes_manage() {
     declare -n local_dirs=lutris_dirs
 
     # Configure the text displayed in the menus
-    local_menu_heading="ULWGL Protonfixes"
-    local_menu_description="ULWGL Protonfixes"
+    local_menu_heading="umu Protonfixes"
+    local_menu_description="umu Protonfixes"
     local_menu_height="140"
 
     # Configure the post local message
@@ -2441,7 +2441,7 @@ fixes_manage() {
     # A header is automatically displayed that reads: local Complete
     # post_local_msg is displayed below the header
     post_local_msg_heading="local Complete"
-    post_local_msg="Would you like to automatically configure Lutris to use this ULWGL Proton?\n\nLutris will be restarted if necessary."
+    post_local_msg="Would you like to automatically configure Lutris to use this umu Proton?\n\nLutris will be restarted if necessary."
     # Set the string sed will match against when editing Lutris yml configs
     # This will be used to detect the appropriate yml key and replace its value
     # with the name of the localed item
@@ -2680,21 +2680,21 @@ display_dirs() {
         dirs_list+="\n\n"
     fi
 
-    # ULWGL Proton
-    if [ -d "$ulwgl_dir_native" ] || [ -d "$ulwgl_dir_flatpak" ]; then
-        dirs_list+="ULWGL Proton:"
-        if [ -d "$ulwgl_dir_native" ] && [ "$lutris_native" = "true" ]; then
-            dirs_list+="\n$ulwgl_dir_native"
+    # umu Proton
+    if [ -d "$umu_dir_native" ] || [ -d "$umu_dir_flatpak" ]; then
+        dirs_list+="umu Proton:"
+        if [ -d "$umu_dir_native" ] && [ "$lutris_native" = "true" ]; then
+            dirs_list+="\n$umu_dir_native"
         fi
-        if [ -d "$ulwgl_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
-            dirs_list+="\n$ulwgl_dir_flatpak"
+        if [ -d "$umu_dir_flatpak" ] && [ "$lutris_flatpak" = "true" ]; then
+            dirs_list+="\n$umu_dir_flatpak"
         fi
         dirs_list+="\n\n"
     fi
 
-    # ULWGL Protonfix
+    # umu Protonfix
     if [ -d "$protonfix_dir_native" ] || [ -d "$protonfix_dir_flatpak" ]; then
-        dirs_list+="ULWGL Protonfix:"
+        dirs_list+="umu Protonfix:"
         if [ -d "$protonfix_dir_native" ] && [ "$lutris_native" = "true" ]; then
             dirs_list+="\n$protonfix_dir_native"
         fi
@@ -3025,8 +3025,8 @@ Usage: lug-helper <options>
   -i, --install                 Install Star Citizen
   -e, --eac                     Deploy Easy Anti-Cheat Workaround
   -m, --manage-runners          Install or remove Lutris runners
-  -l, --manage-ulwgl            Install or remove ULWGL Proton versions
-  -f, --manage-fixes            Install or remove ULWGL Proton fixes
+  -l, --manage-umu            Install or remove umu Proton versions
+  -f, --manage-fixes            Install or remove umu Proton fixes
   -k, --manage-dxvk             Install or remove DXVK versions
   -u, --delete-user-folder      Delete Star Citizen USER dir, preserve keybinds
   -s, --delete-shaders          Delete Star Citizen shaders
@@ -3053,8 +3053,8 @@ Usage: lug-helper <options>
             --manage-runners | -m )
                 cargs+=("runner_manage")
                 ;;
-            --manage-ulwgl | -m )
-                cargs+=("ulwgl_manage")
+            --manage-umu | -m )
+                cargs+=("umu_manage")
                 ;;
             --manage-fixes | -m )
                 cargs+=("fixes_manage")
@@ -3171,17 +3171,17 @@ while true; do
     preflight_msg="Preflight Check (System Optimization)"
     install_msg="Install Star Citizen"
     runners_msg="Manage Lutris Runners"
-    ulwgl_msg="Manage ULWGL Proton"
-    fixes_msg="Manage ULWGL Protonfixes"
+    umu_msg="Manage umu Proton"
+    fixes_msg="Manage umu Protonfixes"
     dxvk_msg="Manage Lutris DXVK Versions"
     maintenance_msg="Maintenance and Troubleshooting"
     randomizer_msg="Get a random Penguin's Star Citizen referral code"
     quit_msg="Quit"
 
     # Set the options to be displayed in the menu
-    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$ulwgl_msg" "$fixes_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
+    menu_options=("$preflight_msg" "$install_msg" "$runners_msg" "$umu_msg" "$fixes_msg" "$dxvk_msg" "$maintenance_msg" "$randomizer_msg" "$quit_msg")
     # Set the corresponding functions to be called for each of the options
-    menu_actions=("preflight_check" "install_game" "runner_manage" "ulwgl_manage" "fixes_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
+    menu_actions=("preflight_check" "install_game" "runner_manage" "umu_manage" "fixes_manage" "dxvk_manage" "maintenance_menu" "referral_randomizer" "quit")
 
     # Calculate the total height the menu should be
     # menu_option_height = pixels per menu option
