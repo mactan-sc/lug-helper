@@ -87,7 +87,8 @@
           "overrides": {
             "powershell.exe": "disabled"
           },
-          "system_winetricks": false
+          "system_winetricks": false,
+          "version": "GE-Proton (Latest)"
         }
       }
     }
