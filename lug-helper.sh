@@ -783,6 +783,8 @@ preflight_check() {
         debug_print exit "Script error: Unexpected argument passed to the preflight_check function. Aborting."
     fi
 
+    helper_check
+
     # Call the optimization functions to perform the checks
     if [ "$install_mode" != "wine" ]; then
         # Don't check for lutris if called from the wine install function
@@ -1087,6 +1089,20 @@ avx_check() {
         preflight_pass+=("Your CPU supports the necessary AVX instruction set.")
     else
         preflight_fail+=("Your CPU does not appear to support AVX instructions.\nThis requirement was added to Star Citizen in version 3.11")
+    fi
+}
+
+helper_check() {
+    # Check if a newer verison of the script is available
+    latest_version="$(get_latest_release "$repo")"
+
+    # Sort the versions and check if the installed Helper is smaller
+    if [ "$latest_version" != "$current_version" ] &&
+    [ "$current_version" = "$(printf "%s\n%s" "$current_version" "$latest_version" | sort -V | head -n1)" ]; then
+
+        preflight_fail+=("The latest version of the LUG Helper is $latest_version\nYou are using $current_version\n\nYou can download new releases here:\n$releases_url")
+    else
+        preflight_pass+=("You are using the latest LUG Helper.")
     fi
 }
 
