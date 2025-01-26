@@ -2307,14 +2307,15 @@ maintenance_menu() {
         userdir_msg="Delete my user folder and preserve keybinds/characters"
         shaders_msg="Delete my shaders (Do this after each game update)"
         vidcache_msg="Delete my DXVK cache"
+        eac_msg="Delete Easy Anti-Cheat Workaround"
         dirs_msg="Display Helper and Star Citizen directories"
         reset_msg="Reset Helper configs"
         quit_msg="Return to the main menu"
 
         # Set the options to be displayed in the menu
-        menu_options=("$version_msg" "$prefix_msg" "$launcher_msg" "$powershell_msg" "$userdir_msg" "$shaders_msg" "$vidcache_msg" "$dirs_msg" "$reset_msg" "$quit_msg")
+        menu_options=("$version_msg" "$prefix_msg" "$launcher_msg" "$powershell_msg" "$userdir_msg" "$shaders_msg" "$vidcache_msg" "$eac_msg" "$dirs_msg" "$reset_msg" "$quit_msg")
         # Set the corresponding functions to be called for each of the options
-        menu_actions=("version_menu" "switch_prefix" "update_launcher" "install_powershell" "rm_userdir" "rm_shaders" "rm_dxvkcache" "display_dirs" "reset_helper" "menu_loop_done")
+        menu_actions=("version_menu" "switch_prefix" "update_launcher" "install_powershell" "rm_userdir" "rm_shaders" "rm_dxvkcache" "rm_eac_workaround" "display_dirs" "reset_helper" "menu_loop_done")
 
         # Calculate the total height the menu should be
         # menu_option_height = pixels per menu option
@@ -2558,6 +2559,85 @@ rm_dxvkcache() {
         debug_print continue "Deleting $dxvk_cache..."
         rm --interactive=never "$dxvk_cache"
         message info "Your DXVK cache has been deleted!"
+    fi
+}
+
+rm_eac_workaround() {
+    # Get/Set directory paths
+    getdirs
+    # Detect the type of Lutris install
+    lutris_detect
+
+    if [ "$?" -eq 1 ]; then
+    # User cancelled and wants to return to the main menu
+    # or there was an error
+    return 0
+    fi
+
+    # Set the EAC directory path and hosts modification
+    # eac_dir="$wine_prefix/drive_c/users/$USER/AppData/Roaming/EasyAntiCheat"
+    eac_hosts="127.0.0.1 modules-cdn.eac-prod.on.epicgames.com"
+
+    # Configure message variables
+    eac_title="Remove Easy Anti-Cheat Workaround"
+    eac_hosts_formatted="$eac_hosts"
+    if [ "$use_zenity" -eq 1 ]; then
+        eac_title="<b>$eac_title</b>"
+        eac_hosts_formatted="<i>$eac_hosts_formatted</i>"
+    fi
+
+    remove_eac_hosts="false"
+    # delete_eac_dir="false"
+    if grep -q "^$eac_hosts" /etc/hosts; then
+        # Hosts workaround is in place
+        eac_message="$eac_title\n\nThe following entry will be removed from /etc/hosts:\n$eac_hosts_formatted"
+        remove_eac_hosts="true"
+
+        # Finish up the message
+        eac_message="$eac_message\n\n\nDo you want to proceed?"
+
+        if message question "$eac_message"; then
+            # Apply the hosts workaround if needed
+            if [ "$remove_eac_hosts" = "true" ]; then
+                debug_print continue "Editing hosts file..."
+                # Try to modify /etc/hosts as root
+                try_exec "sed -i 's/$eac_hosts/#&/' /etc/hosts"
+                if [ "$?" -eq 1 ]; then
+                    message error "Authentication failed or there was an error modifying /etc/hosts.\nSee terminal for more information.\n\nReturning to main menu."
+                    return 0
+                fi
+            fi
+
+            message info "Easy Anti-Cheat hosts workaround has been removed!"
+        fi
+    else
+        message info "Easy Anti-Cheat hosts workaround was not present!"
+    fi
+
+    if [ "$lutris_native" = "true" ]; then
+        for item in $lutris_native_conf_dir/star-citizen-*; do
+            if message question "Are you sure you want to remove the EAC workaround from $(basename -- $item)?"; then
+                sed -i "/EOS_USE_ANTICHEATCLIENTNULL/d" "$item"
+                sed -i "/SteamGameId/d" "$item"
+            fi
+        done
+    fi
+
+    if [ "$lutris_flatpak" = "true" ]; then
+        for item in $lutris_flatpak_conf_dir/star-citizen-*; do
+            if message question "Are you sure you want to remove the EAC workaround from $(basename -- $item)?"; then
+                sed -i "/EOS_USE_ANTICHEATCLIENTNULL/d" "$item"
+                sed -i "/SteamGameId/d" "$item"
+            fi
+        done
+    fi
+
+    if [ -f "$wine_prefix/$wine_launch_script_name" ]; then
+        if message question "Are you sure you want to remove the EAC workaround from $wine_prefix/$wine_launch_script_name"; then
+            sed -i "s/^export EOS_USE_ANTICHEATCLIENTNULL=1/#&/" "$wine_prefix/$wine_launch_script_name"
+
+            message info "Easy Anti-Cheat Wine environment variable workaround has been removed!"
+        fi
     fi
 }
 
@@ -3149,6 +3229,7 @@ Usage: lug-helper <options>
   -m, --manage-wine-runners     Install or remove Wine runners
   -l, --manage-lutris-runners   Install or remove Lutris runners
   -k, --manage-lutris-dxvk      Install or remove Lutris DXVK versions
+  -e, --eac                     Delete Easy Anti-Cheat Workaround
   -u, --delete-user-folder      Delete Star Citizen USER dir, preserve keybinds
   -s, --delete-shaders          Delete Star Citizen shaders
   -c, --delete-dxvk-cache       Delete Star Citizen dxvk cache file
@@ -3186,6 +3267,9 @@ Usage: lug-helper <options>
                 ;;
             --manage-lutris-dxvk | -k )
                 cargs+=("dxvk_manage_lutris")
+                ;;
+            --eac | -e )
+                cargs+=("rm_eac_workaround")
                 ;;
             --delete-user-folder | -u )
                 cargs+=("rm_userdir")
