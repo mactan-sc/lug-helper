@@ -2604,11 +2604,13 @@ update_eac_workaround() {
         found_workaround="true"
     fi
 
+    rootful_path=$(echo "Z:$(realpath "$wine_prefix/$default_install_path")" | sed -e 's/\//\\\\/g')
+    path_message="paste the following path into the RSI Launcher game location in settings:\n\n $rootful_path"
     if [ $found_workaround = "true" ]; then
         rm_eac_workaround
-        message info "Easy Anti-Cheat workaround has been removed!"
+        message info "Easy Anti-Cheat workaround has been removed!\n\n$path_message"
     else
-        message info "Easy Anti-Cheat workaround was not present!"
+        message info "Easy Anti-Cheat workaround was not present!\n\n$path_message"
     fi
 }
 
@@ -2671,7 +2673,6 @@ rm_eac_workaround() {
     fi
 
     if [ -d "$wine_prefix/$roaming_path/EasyAntiCheat" ]; then
-        echo "going to delete $wine_prefix/$roaming_path/EasyAntiCheat"
         rm -r --interactive=never "$wine_prefix/$roaming_path/EasyAntiCheat"
     fi
 
@@ -2679,7 +2680,6 @@ rm_eac_workaround() {
     if [ -d "$game_path" ]; then
         for item in "$game_path"/*; do
             if [ -d "$item/EasyAntiCheat" ]; then
-                echo "going to delete $item/EasyAntiCheat"
                 rm -r --interactive=never "$item/EasyAntiCheat"
             fi
         done
