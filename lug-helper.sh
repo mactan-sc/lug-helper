@@ -786,6 +786,8 @@ preflight_check() {
         debug_print exit "Script error: Unexpected argument passed to the preflight_check function. Aborting."
     fi
 
+    helper_check
+
     # Call the optimization functions to perform the checks
     if [ "$install_mode" != "wine" ]; then
         # Don't check for lutris if called from the wine install function
@@ -1091,6 +1093,16 @@ avx_check() {
         preflight_pass+=("Your CPU supports the necessary AVX instruction set.")
     else
         preflight_fail+=("Your CPU does not appear to support AVX instructions.\nThis requirement was added to Star Citizen in version 3.11")
+    fi
+}
+
+# check helper version
+helper_check() {
+    if [ "$latest_version" != "$current_version" ] &&
+    [ "$current_version" = "$(printf "%s\n%s" "$current_version" "$latest_version" | sort -V | head -n1)" ]; then
+        preflight_fail+=("The latest version of the LUG Helper is $latest_version\nYou are using $current_version\n\nYou can download new releases here:\n$releases_url")
+    else
+        preflight_pass+=("You are using the latest LUG Helper")
     fi
 }
 
@@ -2577,8 +2589,26 @@ update_eac_workaround() {
     return 0
     fi
 
+    # check to see if any of the past workaround flavors are still in place
+    # only attempt workaround removal if one or more workarounds is found
+    check_eac_workaround
+
+    # give the user a properly formatted Z:\ rootful path to paste into the RSI Launcher
+    # this dialog resolves confusion in immutable distros where the home directory is a symlinked path
+    rootful_path=$(echo "Z:$(realpath "$wine_prefix/$default_install_path")" | sed -e 's/\//\\\\/g')
+    path_message="paste the following path into the RSI Launcher game location in settings:\n\n $rootful_path"
+    if [ $found_workaround = "true" ]; then
+        rm_eac_workaround
+        message info "Easy Anti-Cheat workaround has been removed!\n\n$path_message\n\nVerify game files before running the game."
+    else
+        message info "Easy Anti-Cheat workaround was not present!\n\n$path_message"
+    fi
+}
+
+check_eac_workaround() {
     found_workaround="false"
 
+    # search the hosts file for instances ofthe dns workaround
     remove_eac_hosts="false"
     eac_hosts="127.0.0.1 modules-cdn.eac-prod.on.epicgames.com"
     if grep -q "^$eac_hosts" /etc/hosts; then
@@ -2586,31 +2616,27 @@ update_eac_workaround() {
         found_workaround="true"
     fi
 
+    # search native lutris yaml game config files for instances of both eac workaround variables
     remove_lutris_native="false"
     if [ "$lutris_native" = "true" ] && $(grep -q "EOS_USE_ANTICHEATCLIENTNULL\|SteamGameId" --include="star\-citizen*" "$lutris_native_conf_dir"/*); then
         remove_lutris_native="true"
         found_workaround="true"
     fi
 
+
+    # search flatpak lutris yaml game config files for instances of both eac workaround variables
     remove_lutris_flatpak="false"
     if [ "$lutris_flatpak" = "true" ] && $(grep -q "EOS_USE_ANTICHEATCLIENTNULL\|SteamGameId" --include="star\-citizen*" "$lutris_flatpak_conf_dir"/*); then
         remove_lutris_flatpak="true"
         found_workaround="true"
     fi
 
+
+    # search the lug helper's game launch script for instances of the workaround variable
     remove_wine="false"
     if [ -f "$wine_prefix/$wine_launch_script_name" ] && $(grep -q "^export EOS_USE_ANTICHEATCLIENTNULL" "$wine_prefix/$wine_launch_script_name"); then
         remove_wine="true"
         found_workaround="true"
-    fi
-
-    rootful_path=$(echo "Z:$(realpath "$wine_prefix/$default_install_path")" | sed -e 's/\//\\\\/g')
-    path_message="paste the following path into the RSI Launcher game location in settings:\n\n $rootful_path"
-    if [ $found_workaround = "true" ]; then
-        rm_eac_workaround
-        message info "Easy Anti-Cheat workaround has been removed!\n\n$path_message"
-    else
-        message info "Easy Anti-Cheat workaround was not present!\n\n$path_message"
     fi
 }
 
@@ -2646,6 +2672,7 @@ rm_eac_workaround() {
         fi
     fi
 
+    # remove instances of both eac workaround variables from native lutris yaml game config files
     if [ $remove_lutris_native = "true" ]; then
         for item in $lutris_native_conf_dir/star-citizen-*; do
             if message question "Are you sure you want to remove the EAC workaround from $(basename -- $item)?"; then
@@ -2655,6 +2682,7 @@ rm_eac_workaround() {
         done
     fi
 
+    # remove instances of both eac workaround variables from flatpak lutris yaml game config files
     if [ $remove_lutris_flatpak = "true" ]; then
         for item in $lutris_flatpak_conf_dir/star-citizen-*; do
             if message question "Are you sure you want to remove the EAC workaround from $(basename -- $item)?"; then
@@ -2664,6 +2692,7 @@ rm_eac_workaround() {
         done
     fi
 
+    # remove instances of the workaround variable from the lug helper's game launch script
     if [ $remove_wine = "true" ]; then
         if message question "Are you sure you want to remove the EAC workaround from $wine_prefix/$wine_launch_script_name"; then
             sed -i "s/^export EOS_USE_ANTICHEATCLIENTNULL=1/#&/" "$wine_prefix/$wine_launch_script_name"
@@ -2672,6 +2701,7 @@ rm_eac_workaround() {
         fi
     fi
 
+    # delete instances of the EAC from appdata and game directories
     if [ -d "$wine_prefix/$roaming_path/EasyAntiCheat" ]; then
         rm -r --interactive=never "$wine_prefix/$roaming_path/EasyAntiCheat"
     fi
