@@ -2304,7 +2304,8 @@ maintenance_menu() {
         prefix_msg="Target a different Star Citizen installation"
         launcher_msg="Update game launch script (non-Lutris)"
         launchscript_msg="Edit launch script"
-        shell_msg="Launch Wine prefix maintenance shell"
+        cfg_msg="Launch winecfg"
+        control_msg="Launch wine control panel"
         powershell_msg="Install PowerShell into Wine prefix"
         userdir_msg="Delete my user folder and preserve keybinds/characters"
         shaders_msg="Delete my shaders"
@@ -2314,9 +2315,9 @@ maintenance_menu() {
         quit_msg="Return to the main menu"
 
         # Set the options to be displayed in the menu
-        menu_options=("$version_msg" "$prefix_msg" "$launcher_msg" "$launchscript_msg" "$shell_msg" "$powershell_msg" "$userdir_msg" "$shaders_msg" "$vidcache_msg" "$dirs_msg" "$reset_msg" "$quit_msg")
+        menu_options=("$version_msg" "$prefix_msg" "$launcher_msg" "$launchscript_msg" "$cfg_msg" "$control_msg" "$powershell_msg" "$userdir_msg" "$shaders_msg" "$vidcache_msg" "$dirs_msg" "$reset_msg" "$quit_msg")
         # Set the corresponding functions to be called for each of the options
-        menu_actions=("version_menu" "switch_prefix" "update_launcher" "edit_wine_launch_script" "launch_wine_shell" "install_powershell" "rm_userdir" "rm_shaders" "rm_dxvkcache" "display_dirs" "reset_helper" "menu_loop_done")
+        menu_actions=("version_menu" "switch_prefix" "update_launcher" "edit_wine_launch_script" "launch_wine_cfg" "launch_wine_control" "install_powershell" "rm_userdir" "rm_shaders" "rm_dxvkcache" "display_dirs" "reset_helper" "menu_loop_done")
 
         # Calculate the total height the menu should be
         # menu_option_height = pixels per menu option
@@ -2437,6 +2438,18 @@ update_launcher() {
     fi
 }
 
+launch_wine_cfg ()
+{
+    shell_cmd="wine winecfg"
+    launch_wine_shell
+}
+
+launch_wine_control ()
+{
+    shell_cmd="wine control"
+    launch_wine_shell
+}
+
 # Launch a Wine prefix maintenance shell using our launch script's shell argument
 launch_wine_shell ()
 {
@@ -2465,7 +2478,7 @@ launch_wine_shell ()
     fi
 
     # Launch a wine shell using the launch script
-    "$wine_prefix/$wine_launch_script_name" shell
+    "$wine_prefix/$wine_launch_script_name" shell "$shell_cmd"
 }
 
 # Edit the launch script
@@ -3229,7 +3242,8 @@ Usage: lug-helper <options>
   -l, --manage-lutris-runners   Install or remove Lutris runners
   -o, --update-wine-dxvk        Update DXVK for native Wine installs
   -k, --manage-lutris-dxvk      Install or remove Lutris DXVK versions
-  -e, --wine-shell              Open a Wine maintenance shell
+  -f, --wine-cfg                Open winecfg
+  -n, --wine-control            Open wine control panel
   -a, --edit-launch-script      Edit the native Wine install launch script
   -u, --delete-user-folder      Delete Star Citizen USER dir, preserve keybinds
   -s, --delete-shaders          Delete Star Citizen shaders
@@ -3272,8 +3286,11 @@ Usage: lug-helper <options>
             --manage-lutris-dxvk | -k )
                 cargs+=("dxvk_manage_lutris")
                 ;;
-            --wine-shell | -e )
-                cargs+=("launch_wine_shell")
+            --wine-cfg | -f )
+                cargs+=("launch_wine_cfg")
+                ;;
+            --wine-control | -n )
+                cargs+=("launch_wine_control")
                 ;;
             --edit-launch-script | -a )
                 cargs+=("edit_wine_launch_script")

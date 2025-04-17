@@ -61,7 +61,12 @@ if [ "$1" = "shell" ]; then
     echo "Useful commands: winecfg, wine control joy.cpl, wineserver -k"
     echo "Type 'exit' when done."
     export PATH="$wine_path:$PATH"; export PS1="Wine: "
-    cd "$WINEPREFIX"; /usr/bin/env bash --norc; exit 0
+
+    if ! [[ -n "$2" ]]; then
+        cd "$WINEPREFIX"; /usr/bin/env bash --norc; exit 0
+    else
+        cd "$WINEPREFIX"; /usr/bin/env bash --norc -c "$2"; exit 0
+    fi
 fi
 
 #############################################
