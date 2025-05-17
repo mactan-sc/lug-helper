@@ -200,6 +200,9 @@ wine_required="9.4"
 # Lutris minimum version
 lutris_required="0.5.18"
 
+# Lutris runner minimum version
+lutris_runner_required="ge-proton"
+
 # Minimum amount of RAM in GiB
 memory_required="16"
 # Minimum amount of combined RAM + swap in GiB
@@ -232,13 +235,26 @@ current_version="v3.9"
 
 
 # Try to execute a supplied command as root
-# Expects one string argument
+# Expects two string arguments
+# semicolon separate commands, and string run elevated "true" or "false"
 try_exec() {
-    # This function expects one string argument
-    if [ "$#" -lt 1 ]; then
+    # This function expects two string arguments
+    if [ "$#" -lt 2 ]; then
         printf "\nScript error:  The try_exec() function expects an argument. Aborting.\n"
         read -n 1 -s -p "Press any key..."
         exit 0
+    fi
+
+    # do not run elevated if false
+    if [[ $2 == "false" ]]; then
+        sh -c "$1"
+        # Check the exit status
+        if [ "$?" -eq 1 ]; then
+            # Error
+            return 1
+        else
+            return 0
+        fi
     fi
 
     # Use pollkit's pkexec for gui authentication with a fallback to sudo
@@ -816,21 +832,40 @@ preflight_check() {
             for (( i=0; i<"${#preflight_action_funcs[@]}"; i++ )); do
                 ${preflight_action_funcs[i]}
             done
+
             # Populate a string of actions to be executed
-            for (( i=0; i<"${#preflight_actions[@]}"; i++ )); do
-                if [ "$i" -eq 0 ]; then
-                    preflight_actions_string="${preflight_actions[i]}"
+            for (( i=0; i<"${#preflight_actions[@]}"; i=i+2 )); do
+                if [[ "${preflight_actions[i]}" == "true" ]]; then
+                    if [ -z $preflight_actions_string ]; then
+                        preflight_actions_string="${preflight_actions[i+1]}"
+                    else
+                        preflight_actions_string="$preflight_actions_string; ${preflight_actions[i+1]}"
+                    fi
                 else
-                    preflight_actions_string="$preflight_actions_string; ${preflight_actions[i]}"
+                    if [[ -z "$preflight_unprivileged_actions_string" ]]; then
+                        preflight_unprivileged_actions_string="${preflight_actions[i+1]}"
+                    else
+                        preflight_unprivileged_actions_string="$preflight_unprivileged_actions_string; ${preflight_actions[i+1]}"
+                    fi
                 fi
             done
 
             # Execute the actions set by the functions
             if [ -n "$preflight_actions_string" ]; then
                 # Try to execute the actions as root
-                try_exec "$preflight_actions_string"
+                try_exec "$preflight_actions_string" "true"
                 if [ "$?" -eq 1 ]; then
                     message error "Authentication failed or there was an error.\nSee terminal for more information.\n\nReturning to main menu."
+                    return 0
+                fi
+            fi
+
+            # Execute the actions set by the functions
+            if [ -n "$preflight_unprivileged_actions_string" ]; then
+                # Try to execute the actions
+                try_exec "$preflight_unprivileged_actions_string" "false"
+                if [ "$?" -eq 1 ]; then
+                    message error "There was an error.\nSee terminal for more information.\n\nReturning to main menu."
                     return 0
                 fi
             fi
@@ -883,6 +918,22 @@ lutris_check() {
         else
             preflight_pass+=("Lutris is installed and sufficiently up to date.")
         fi
+
+        lutris_runner="$(grep -A1 '^wine:' $conf_dir/lutris/runners/wine.yml | grep version | cut -d':' -f2- | xargs)"
+        if [[ "$lutris_runner" == "$lutris_runner_required" ]]; then
+            # All good
+            preflight_pass+=("Lutris runner is set to $lutris_runner.")
+        else
+            # The setting should be changed
+            preflight_fail+=("Lutris runner should be set to $lutris_runner_required")
+
+            # Add the function that will be called to change the configuration
+            # preflight_action_funcs+=("lutris_set")
+            lutris_require_runner="true"
+
+            # Add info for manually changing the setting
+            preflight_manual+=("To change Lutris global Wine runner, edit global preferences in Lutris")
+        fi
     fi
 
     # Check the flatpak lutris version number
@@ -896,6 +947,26 @@ lutris_check() {
         else
             preflight_pass+=("Flatpak Lutris is installed and sufficiently up to date.")
         fi
+
+        lutris_runner="$(grep -A1 '^wine:' $lutris_flatpak_dir/data/lutris/runners/wine.yml | grep version | cut -d':' -f2- | xargs)"
+        if [[ "$lutris_runner" == "$lutris_runner_required" ]]; then
+            # All good
+            preflight_pass+=("Flatpak Lutris runner is set to $lutris_runner.")
+        else
+            # The setting should be changed
+            preflight_fail+=("Flatpak Lutris runner should be set to $lutris_runner_required")
+
+            # Add the function that will be called to change the configuration
+            # preflight_action_funcs+=("lutris_set")
+            lutris_require_runner="true"
+
+            # Add info for manually changing the setting
+            preflight_manual+=("To change Flatpak Lutris global Wine runner, edit global preferences in Flatpak Lutris")
+        fi
+    fi
+
+    if [[ "$lutris_require_runner" == "true" ]]; then
+        preflight_action_funcs+=("lutris_set")
     fi
 }
 
@@ -915,6 +986,23 @@ lutris_detect() {
     if [ -x "$(command -v flatpak)" ] && flatpak list --app | grep -q Lutris; then
             lutris_installed="true"
             lutris_flatpak="true"
+    fi
+}
+
+# Set lutris runner
+lutris_set() {
+    lutris_detect
+
+    # Check the native lutris version
+    if [ "$lutris_native" = 'true' ]; then
+        preflight_actions+=('false' "sed -i '/^wine:/, /^[^ ]/ s/^\(\s*version:\s*\).*/\1$lutris_runner_required/' $conf_dir/lutris/runners/wine.yml")
+        preflight_fix_results+=("The Lutris global wine runner has been configured.")
+    fi
+
+    # Check the flatpak lutris version
+    if [ "$lutris_flatpak" = 'true' ]; then
+        preflight_actions+=('false' "sed -i '/^wine:/, /^[^ ]/ s/^\(\s*version:\s*\).*/\1$lutris_runner_required/' $lutris_flatpak_dir/data/lutris/runners/wine.yml")
+        preflight_fix_results+=("The Flatpak Lutris global wine runner has been configured.")
     fi
 }
 
@@ -1053,11 +1141,11 @@ mapcount_check() {
 mapcount_set() {
     if [ -d "/etc/sysctl.d" ]; then
         # Newer versions of sysctl
-        preflight_actions+=('printf "\n# Added by LUG-Helper:\nvm.max_map_count = 16777216\n" > /etc/sysctl.d/99-starcitizen-max_map_count.conf && sysctl --quiet --system')
+        preflight_actions+=('true' 'printf "\n# Added by LUG-Helper:\nvm.max_map_count = 16777216\n" > /etc/sysctl.d/99-starcitizen-max_map_count.conf && sysctl --quiet --system')
         preflight_fix_results+=("The vm.max_map_count configuration has been added to:\n/etc/sysctl.d/99-starcitizen-max_map_count.conf")
     else
         # Older versions of sysctl
-        preflight_actions+=('printf "\n# Added by LUG-Helper:\nvm.max_map_count = 16777216" >> /etc/sysctl.conf && sysctl -p')
+        preflight_actions+=('true' 'printf "\n# Added by LUG-Helper:\nvm.max_map_count = 16777216" >> /etc/sysctl.conf && sysctl -p')
         preflight_fix_results+=("The vm.max_map_count configuration has been added to:\n/etc/sysctl.conf")
     fi
 
@@ -1067,7 +1155,7 @@ mapcount_set() {
 
 # Sets vm.max_map_count for the current session only
 mapcount_once() {
-    preflight_actions+=('sysctl -w vm.max_map_count=16777216')
+    preflight_actions+=('true' 'sysctl -w vm.max_map_count=16777216')
     preflight_fix_results+=("vm.max_map_count was changed until the next boot.")
     preflight_followup+=("mapcount_confirm")
 }
@@ -1120,12 +1208,12 @@ filelimit_set() {
     if [ -f "/etc/systemd/system.conf" ]; then
         # Using systemd
         # Append to the file
-        preflight_actions+=('mkdir -p /etc/systemd/system.conf.d && printf "[Manager]\n# Added by LUG-Helper:\nDefaultLimitNOFILE=524288\n" > /etc/systemd/system.conf.d/99-starcitizen-filelimit.conf && systemctl daemon-reexec')
+        preflight_actions+=('true' 'mkdir -p /etc/systemd/system.conf.d && printf "[Manager]\n# Added by LUG-Helper:\nDefaultLimitNOFILE=524288\n" > /etc/systemd/system.conf.d/99-starcitizen-filelimit.conf && systemctl daemon-reexec')
         preflight_fix_results+=("The open files limit configuration has been added to:\n/etc/systemd/system.conf.d/99-starcitizen-filelimit.conf")
     elif [ -f "/etc/security/limits.conf" ]; then
         # Using limits.conf
         # Insert before the last line in the file
-        preflight_actions+=('sed -i "\$i#Added by LUG-Helper:" /etc/security/limits.conf; sed -i "\$i* hard nofile 524288" /etc/security/limits.conf')
+        preflight_actions+=('true' 'sed -i "\$i#Added by LUG-Helper:" /etc/security/limits.conf; sed -i "\$i* hard nofile 524288" /etc/security/limits.conf')
         preflight_fix_results+=("The open files limit configuration has been appended to:\n/etc/security/limits.conf")
     else
         # Don't know what method to use
