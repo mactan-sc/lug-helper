@@ -86,19 +86,21 @@ data_dir="${XDG_DATA_HOME:-$HOME/.local/share}"
 # .config subdirectory
 conf_subdir="starcitizen-lug"
 
-# Flatpak lutris directory
-lutris_flatpak_dir="$HOME/.var/app/net.lutris.Lutris"
+lutris_native_conf_dir="$([ -d "$conf_dir/lutris" ] && echo "$conf_dir/lutris" || echo "$data_dir/lutris")"
 
 # Lutris native game configs directory
-lutris_native_conf_dir="$conf_dir/lutris/games"
+lutris_native_conf_game_dir="$lutris_native_conf_dir/games"
 
 # Lutris native wine config
-lutris_native_wine_yml="$conf_dir/lutris/runners/wine.yml"
+lutris_native_wine_yml="$lutris_native_conf_dir/runners/wine.yml"
 
-# Lutris flatpak game configs directory
-lutris_flatpak_conf_dir="$lutris_flatpak_dir/config/lutris/games"
+# Lutris Flatpak directory
+lutris_flatpak_dir="$HOME/.var/app/net.lutris.Lutris"
 
-# Lutris flatpak wine config
+# Lutris Flatpak game configs directory
+lutris_flatpak_conf_game_dir="$lutris_flatpak_dir/data/lutris/games"
+
+# Lutris Flatpak wine config
 lutris_flatpak_wine_yml="$lutris_flatpak_dir/data/lutris/runners/wine.yml"
 
 # Helper directory
@@ -939,7 +941,7 @@ lutris_check() {
             # The setting should be changed
             preflight_fail+=("Lutris' runner should be set to ${lutris_runner_required}.")
 
-            preflight_action_funcs+=("lutris_set_runner ${conf_dir}/lutris/runners/wine.yml")
+            preflight_action_funcs+=("lutris_set_runner ${lutris_native_wine_yml}")
             preflight_fix_results+=("Lutris' global Wine runner has been set to '${lutris_runner_required}'.")
 
             # Add info for manually changing the setting
@@ -1032,7 +1034,7 @@ lutris_set_runner() {
     version_sed_string="version: "
     if [ ! -f "$1" ] || [ "$(cat "$1")" = "{}" ]; then
         # If the file doesn't exist yet or has at most one line, make it with the wine version content
-        preflight_user_actions+=("mkdir -p \$(dirname \"\$1\"); printf 'wine:\n  version: ${lutris_runner_required}\n' > '$1'")
+        preflight_user_actions+=("mkdir -p \$(dirname $1); printf 'wine:\n  version: ${lutris_runner_required}\n' > '$1'")
         # This assumes an indent of two spaces before the key:value pair
     elif ! grep -q "^wine:" "$1"; then
         # If wine: group doesnt exist append it with the version: node
@@ -2105,19 +2107,23 @@ post_download() {
         # Build an array of all Lutris Star Citizen yml files
         while IFS='' read -r line; do
             lutris_game_ymls+=("$line")
-        done < <(grep -iRlE --include="*.yml" "Roberts Space Industries|starcitizen|star citizen|star-citizen" "$lutris_native_conf_dir" "$lutris_flatpak_conf_dir" 2>/dev/null)
-
+        done < <(grep -iRlE --include="*.yml" "Roberts Space Industries|starcitizen|star citizen|star-citizen" "$lutris_native_conf_game_dir" "$lutris_flatpak_conf_game_dir" 2>/dev/null)
         # We handle installs and deletions differently
         if [ "$download_action_success" = "installed" ]; then
             # We are installing something for Lutris
             if message question "$post_install_msg_heading\n\n$post_install_msg"; then
                 # Cylce through all Lutris config files for Star Citizen and configure the downloaded item
                 for (( i=0; i<"${#lutris_game_ymls[@]}"; i++ )); do
+                    debug_print continue "${lutris_game_ymls[i]}"
+
                     # Replace the appropriate key:value line if it exists
                     sed -Ei "/^wine:/,/^[^[:blank:]]/ {/^[[:blank:]]*${post_download_sed_string}/s/${post_download_sed_string}.*/${post_download_sed_string}${downloaded_item_name}/}" "${lutris_game_ymls[i]}"
 
-                    # If it doesn't exist, add it at the start of the wine: grouping
-                    if ! grep -q "${post_download_sed_string}${downloaded_item_name}" "${lutris_game_ymls[i]}"; then
+                    if ! grep -q "^wine:" "${lutris_game_ymls[i]}"; then
+                        # If wine: group doesnt exist append it with the version: node
+                        printf "\nwine:\n  version: ${downloaded_item_name}\n" >> "${lutris_game_ymls[i]}"
+                    elif ! grep -q "${post_download_sed_string}${downloaded_item_name}" "${lutris_game_ymls[i]}"; then
+                        # If it doesn't exist, add it at the start of the wine: grouping
                         # This assumes an indent of two spaces before the key:value pair
                         sed -i -e '/^wine:/a\' -e "  ${post_download_sed_string}${downloaded_item_name}" "${lutris_game_ymls[i]}"
                     fi
