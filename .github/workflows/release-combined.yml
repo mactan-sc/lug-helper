@@ -1,0 +1,106 @@
+on:
+  workflow_dispatch:
+  create:
+    tags:
+      - 'v[0-9].[0-9]'
+      - 'v[0-9].[0-9][0-9]'
+
+name: Release AppImage
+
+permissions:
+    contents: write
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    outputs:
+      TAG: ${{ steps.fetch_lug.outputs.TAG }}
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+      - name: Fetch latest tag
+        id: fetch_lug
+        run: |
+          git fetch --tags
+          echo "TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> $GITHUB_OUTPUT
+      - name: debug
+        run: |
+          echo "tag is ${{ steps.fetch_lug.outputs.TAG }}"
+  build:
+    runs-on: ubuntu-latest
+    needs: parse
+    steps:
+      - name: Prepare
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cabextract unzip curl libappimage-dev libfuse3-3 libmspack0
+          sudo wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool && sudo chmod +x /usr/local/bin/appimagetool
+      - name: build
+        run: |
+          set -euo pipefail
+          echo "#!/usr/bin/env bash
+          set -euo pipefail
+          
+          HERE="$(cd "$(dirname "$0")" && pwd -P)"
+          export PATH="$HERE/usr/bin:$PATH"
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
+          exec "$HERE/lug-helper.sh" "$@"" > "AppRun"
+          
+          echo "[Desktop Entry]
+          Type=Application
+          Name=LUG Helper
+          GenericName=Star Citizen LUG Helper
+          Comment=Star Citizen LUG helper and launcher installer
+          Exec=AppRun
+          Icon=lug-helper
+          Terminal=true
+          Categories=Game;" > "lug-helper.desktop"
+
+          APPDIR="${PWD}/AppDir"
+          OUTPUT="${PWD}/LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage"
+          
+          rm -rf "$APPDIR" "$OUTPUT"
+          mkdir -p "$APPDIR"
+          mkdir -p "$APPDIR/usr/bin"
+          mkdir -p "$APPDIR/usr/lib"
+          mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
+          mkdir -p "$APPDIR/lib"
+          
+          cp "AppRun" "$APPDIR/"
+          cp "lug-helper.desktop" "$APPDIR/"
+          cp "lug-helper.sh" "$APPDIR/"
+          cp "lib/sc-launch.sh" "$APPDIR/lib/"
+          cp "lug-logo.png" "$APPDIR/lug-helper.png"
+          cp "lug-logo.png" "$APPDIR/.DirIcon"
+          cp "lug-logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/lug-helper.png"
+          cp "rsi-launcher.png" "$APPDIR/rsi-launcher.png"
+          cp "starcitizen.png" "$APPDIR/starcitizen.png"
+          
+          for cmd in unzip cabextract; do
+              cp "$(command -v "$cmd")" "$APPDIR/usr/bin/"
+              chmod +x "$APPDIR/usr/bin/$cmd"
+           done
+          
+          cabextract_path="$(command -v cabextract)"
+          libmspack_path="$(ldd "$cabextract_path" | awk '/libmspack.so\.0/ {print $3}')"
+          cp "$libmspack_path" "$APPDIR/usr/lib/"
+          
+          chmod +x "$APPDIR/AppRun"
+          chmod +x "$APPDIR/lug-helper.sh"
+          
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          ARCH="${ARCH:-x86_64}" appimagetool "$APPDIR" "$OUTPUT"
+          
+          printf "AppImage created: %s\n" "$OUTPUT"
+  release:
+    runs-on: ubuntu-latest
+    needs: [parse, build]
+    steps:
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: lug helper ${{ needs.parse.outputs.TAG }}
+          files: LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage
+          tag_name: ${{ needs.parse.outputs.TAG }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
