@@ -39,15 +39,18 @@ jobs:
           sudo wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool && sudo chmod +x /usr/local/bin/appimagetool
       - name: build
         run: |
-          echo "#!/usr/bin/env bash
+          cat > AppRun <<'EOF'
+          #!/usr/bin/env bash
           set -euo pipefail
           
-          HERE=\"$(cd \"$(dirname \"$0\")\" && pwd -P)\"
-          export PATH=\"$HERE/usr/bin:$PATH\"
-          export LD_LIBRARY_PATH=\"$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}\"
-          exec \"$HERE/lug-helper.sh\" \"$@\"" > "AppRun"
-          
-          echo "[Desktop Entry]
+          HERE="$(cd "$(dirname "$0")" && pwd -P)"
+          export PATH="$HERE/usr/bin:$PATH"
+          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
+          exec "$HERE/lug-helper.sh" "$@"
+          EOF
+
+          cat > lug-helper.desktop <<'EOF'
+          [Desktop Entry]
           Type=Application
           Name=LUG Helper
           GenericName=Star Citizen LUG Helper
@@ -55,8 +58,9 @@ jobs:
           Exec=AppRun
           Icon=lug-helper
           Terminal=true
-          Categories=Game;" > "lug-helper.desktop"
-
+          Categories=Game;
+          EOF
+          
           APPDIR="${PWD}/AppDir"
           OUTPUT="${PWD}/LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage"
           
