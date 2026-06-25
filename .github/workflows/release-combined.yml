@@ -37,14 +37,13 @@ jobs:
           sudo wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool && sudo chmod +x /usr/local/bin/appimagetool
       - name: build
         run: |
-          set -euo pipefail
           echo "#!/usr/bin/env bash
           set -euo pipefail
           
-          HERE="$(cd "$(dirname "$0")" && pwd -P)"
-          export PATH="$HERE/usr/bin:$PATH"
-          export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
-          exec "$HERE/lug-helper.sh" "$@"" > "AppRun"
+          HERE=\"$(cd \"$(dirname \"$0\")\" && pwd -P)\"
+          export PATH=\"$HERE/usr/bin:$PATH\"
+          export LD_LIBRARY_PATH=\"$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}\"
+          exec \"$HERE/lug-helper.sh\" \"$@\"" > "AppRun"
           
           echo "[Desktop Entry]
           Type=Application
