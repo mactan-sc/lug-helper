@@ -93,10 +93,19 @@ jobs:
           ARCH="${ARCH:-x86_64}" appimagetool "$APPDIR" "$OUTPUT"
           
           printf "AppImage created: %s\n" "$OUTPUT"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage
+          path: LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage
   release:
     runs-on: ubuntu-latest
     needs: [parse, build]
     steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
