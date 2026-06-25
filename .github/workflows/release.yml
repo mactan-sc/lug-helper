@@ -1,0 +1,39 @@
+on:
+  workflow_dispatch:
+
+name: Release AppImage
+
+permissions:
+    contents: write
+
+jobs:
+  parse:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch latest tag
+        id: fetch_lug
+        run: |
+          git fetch --tags
+          echo "tag=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> "$GITHUB_ENV"
+  build:
+    needs: parse
+    uses: mactan-sc/lug-helper-appimage/.github/workflows/build.yml@main
+    with:
+      tag: $tag
+  release:
+    runs-on: ubuntu-latest
+    needs: [parse, build]
+    steps:
+      - name: Download All Artifacts
+        uses: actions/download-artifact@v8
+        with:
+          merge-multiple: true
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          name: lug helper $tag
+          files: LUG-Helper-$tag.AppImage
+          tag_name: $tag
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
