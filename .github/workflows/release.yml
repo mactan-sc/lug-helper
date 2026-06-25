@@ -16,12 +16,12 @@ jobs:
         id: fetch_lug
         run: |
           git fetch --tags
-          echo "tag=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> "$GITHUB_ENV"
+          echo "TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> $GITHUB_OUTPUT
   build:
     needs: parse
     uses: mactan-sc/lug-helper-appimage/.github/workflows/build.yml@main
     with:
-      tag: $tag
+      tag: ${{ needs.parse.outputs.TAG }}
   release:
     runs-on: ubuntu-latest
     needs: [parse, build]
