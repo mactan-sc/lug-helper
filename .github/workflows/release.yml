@@ -19,6 +19,9 @@ jobs:
         run: |
           git fetch --tags
           echo "TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> $GITHUB_OUTPUT
+      - name: debug
+        run: |
+          echo "tag is ${{ steps.fetch_lug.outputs.TAG }}"
   build:
     needs: parse
     uses: mactan-sc/lug-helper-appimage/.github/workflows/build.yml@main
