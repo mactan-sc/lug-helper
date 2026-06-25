@@ -10,6 +10,8 @@ jobs:
   parse:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
       - name: Fetch latest tag
         id: fetch_lug
         run: |
