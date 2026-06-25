@@ -35,9 +35,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          name: lug helper $tag
+          name: lug helper ${{ needs.parse.outputs.TAG }}
           files: LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage
           tag_name: ${{ needs.parse.outputs.TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      
