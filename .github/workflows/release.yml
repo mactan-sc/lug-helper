@@ -36,8 +36,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           name: lug helper $tag
-          files: LUG-Helper-$tag.AppImage
-          tag_name: $tag
+          files: LUG-Helper-${{ needs.parse.outputs.TAG }}.AppImage
+          tag_name: ${{ needs.parse.outputs.TAG }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       
