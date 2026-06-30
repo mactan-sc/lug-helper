@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   release:
-    name: build and release
+    name: Build and Release
     runs-on: ubuntu-latest
     outputs:
       TAG: ${{ steps.fetch_lug.outputs.TAG }}
@@ -24,14 +24,12 @@ jobs:
         run: |
           git fetch --tags
           echo "TAG=$(git describe --tags "$(git rev-list --tags --max-count=1)")" >> $GITHUB_OUTPUT
-      - name: Checkout repo
-        uses: actions/checkout@v6
       - name: Prepare
         run: |
           sudo apt-get update
           sudo apt-get install -y cabextract unzip curl libappimage-dev libfuse3-3 libmspack0
           sudo wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool && sudo chmod +x /usr/local/bin/appimagetool
-      - name: build
+      - name: Build
         run: |
           cat > AppRun <<'EOF'
           #!/usr/bin/env bash
@@ -96,7 +94,7 @@ jobs:
         with:
           name: LUG-Helper-${{ steps.fetch_lug.outputs.TAG }}.AppImage
           path: LUG-Helper-${{ steps.fetch_lug.outputs.TAG }}.AppImage
-      - name: Create GitHub Release
+      - name: Create GitHub release
         uses: softprops/action-gh-release@v3
         with:
           name: lug helper ${{ steps.fetch_lug.outputs.TAG }}
