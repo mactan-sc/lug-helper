@@ -68,7 +68,7 @@ jobs:
           cp "lug-helper.sh" "$APPDIR/"
           cp "lib/sc-launch.sh" "$APPDIR/lib/"
           cp "lug-logo.png" "$APPDIR/lug-helper.png"
-          cp "lug-logo.png" "$APPDIR/.DirIcon"
+          ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           cp "lug-logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/lug-helper.png"
           cp "rsi-launcher.png" "$APPDIR/rsi-launcher.png"
           cp "starcitizen.png" "$APPDIR/starcitizen.png"
