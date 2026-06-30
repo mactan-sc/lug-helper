@@ -54,7 +54,7 @@ jobs:
           EOF
 
 
-          cat > lug-helper.metainfo.xml <<'EOF'
+          cat > org.starcitizen-lug.lug-helper.appdata.xml <<'EOF'
           <?xml version="1.0" encoding="UTF-8"?>
           <component type="desktop-application">
           	<id>org.starcitizen-lug.lug-helper</id>
@@ -96,7 +96,7 @@ jobs:
           cp "lug-logo.png" "$APPDIR/lug-helper.png"
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           cp "lug-logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/lug-helper.png"
-          cp "lug-helper.metainfo.xml" "$APPDIR/usr/share/metainfo/"
+          cp "org.starcitizen-lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/"
           cp "rsi-launcher.png" "$APPDIR/rsi-launcher.png"
           cp "starcitizen.png" "$APPDIR/starcitizen.png"
           
