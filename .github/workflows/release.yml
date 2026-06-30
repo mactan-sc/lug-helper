@@ -52,6 +52,26 @@ jobs:
           Terminal=true
           Categories=Game;
           EOF
+
+
+          cat > lug-helper.appdata.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <component type="desktop-application">
+          	<id>lug-helper</id>
+          	<metadata_license>GPL-3.0</metadata_license>
+          	<project_license>GPL-3.0</project_license>
+          	<name>LUG Helper</name>
+          	<summary>Star Citizen LUG helper and launcher installer</summary>
+          	<description>
+          		<p>The official installer of Star Citizen's Linux Users Group</p>
+          	</description>
+          	<launchable type="desktop-id">lug-helper.desktop</launchable>
+          	<url type="homepage">https://wiki.starcitizen-lug.org/</url>
+          	<provides>
+          		<id>lug-helper.desktop</id>
+          	</provides>
+          </component>
+          EOF
           
           APPDIR="${PWD}/AppDir"
           OUTPUT="${PWD}/LUG-Helper-${{ steps.fetch_lug.outputs.TAG }}.AppImage"
@@ -70,6 +90,7 @@ jobs:
           cp "lug-logo.png" "$APPDIR/lug-helper.png"
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           cp "lug-logo.png" "$APPDIR/usr/share/icons/hicolor/256x256/apps/lug-helper.png"
+          cp "lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/"
           cp "rsi-launcher.png" "$APPDIR/rsi-launcher.png"
           cp "starcitizen.png" "$APPDIR/starcitizen.png"
           
