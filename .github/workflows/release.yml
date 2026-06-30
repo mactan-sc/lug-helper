@@ -107,9 +107,7 @@ jobs:
           chmod +x "$APPDIR/AppRun"
           chmod +x "$APPDIR/lug-helper.sh"
           
-          export APPIMAGE_EXTRACT_AND_RUN=1
-          ARCH="${ARCH:-x86_64}" appimagetool "$APPDIR" "$OUTPUT"
-          
+          ARCH="${ARCH:-x86_64}" appimagetool --no-appstream "$APPDIR" "$OUTPUT"
           printf "AppImage created: %s\n" "$OUTPUT"
       - name: Upload artifact
         uses: actions/upload-artifact@v7
