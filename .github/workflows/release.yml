@@ -82,10 +82,12 @@ jobs:
           mkdir -p "$APPDIR/usr/lib"
           mkdir -p "$APPDIR/usr/share/icons/hicolor/256x256/apps"
           mkdir -p "$APPDIR/usr/share/metainfo"
+          mkdir -p "$APPDIR/usr/share/applications"
           mkdir -p "$APPDIR/lib"
           
           cp "AppRun" "$APPDIR/"
           cp "lug-helper.desktop" "$APPDIR/"
+          cp "lug-helper.desktop" "$APPDIR/usr/share/applications/"
           cp "lug-helper.sh" "$APPDIR/"
           cp "lib/sc-launch.sh" "$APPDIR/lib/"
           cp "lug-logo.png" "$APPDIR/lug-helper.png"
