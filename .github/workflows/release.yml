@@ -100,6 +100,7 @@ jobs:
           cp "starcitizen.png" "$APPDIR/starcitizen.png"
 
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
+          ln -sf "org.starcitizen_lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/org.starcitizen_lug.lug-helper.metainfo.xml"
 
           for cmd in unzip cabextract; do
               cp "$(command -v "$cmd")" "$APPDIR/usr/bin/"
