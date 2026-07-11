@@ -8,7 +8,7 @@ on:
 name: Release AppImage
 
 permissions:
-    contents: write
+  contents: write
 
 jobs:
   release:
@@ -28,13 +28,25 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y cabextract unzip curl libappimage-dev libfuse3-3 libmspack0
-          sudo wget -q https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage -O /usr/local/bin/appimagetool && sudo chmod +x /usr/local/bin/appimagetool
+
+          sudo wget -q \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+            -O /usr/local/bin/appimagetool
+
+          sudo wget -q \
+            https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage \
+            -O /usr/local/bin/linuxdeploy
+
+          sudo chmod +x \
+            /usr/local/bin/appimagetool \
+            /usr/local/bin/linuxdeploy
+
       - name: Build
         run: |
           cat > AppRun <<'EOF'
           #!/usr/bin/env bash
           set -euo pipefail
-          
+
           HERE="$(cd "$(dirname "$0")" && pwd -P)"
           export PATH="$HERE/usr/bin:$PATH"
           export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
@@ -53,32 +65,31 @@ jobs:
           Categories=Game;
           EOF
 
-
           cat > org.starcitizen_lug.lug-helper.appdata.xml <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <component type="desktop-application">
-          	<id>org.starcitizen_lug.lug-helper</id>
-          	<metadata_license>CC0-1.0</metadata_license>
+            <id>org.starcitizen_lug.lug-helper</id>
+            <metadata_license>CC0-1.0</metadata_license>
             <project_license>GPL-3.0-or-later</project_license>
-          	<name>LUG Helper</name>
+            <name>LUG Helper</name>
             <developer id="org.starcitizen_lug">
               <name>Star Citizen Linux User Group</name>
             </developer>
-          	<summary>Star Citizen LUG helper and launcher installer</summary>
-          	<description>
-          		<p>The official installer of Star Citizen's Linux Users Group</p>
-          	</description>
-          	<launchable type="desktop-id">org.starcitizen_lug.lug-helper.desktop</launchable>
-          	<url type="homepage">https://wiki.starcitizen-lug.org/</url>
-          	<provides>
-          		<id>org.starcitizen_lug.lug-helper.desktop</id>
-          	</provides>
+            <summary>Star Citizen LUG helper and launcher installer</summary>
+            <description>
+              <p>The official installer of Star Citizen's Linux Users Group</p>
+            </description>
+            <launchable type="desktop-id">org.starcitizen_lug.lug-helper.desktop</launchable>
+            <url type="homepage">https://wiki.starcitizen-lug.org/</url>
+            <provides>
+              <id>org.starcitizen_lug.lug-helper.desktop</id>
+            </provides>
           </component>
           EOF
-          
+
           APPDIR="${PWD}/AppDir"
           OUTPUT="${PWD}/LUG-Helper-${{ steps.fetch_lug.outputs.TAG }}.AppImage"
-          
+
           rm -rf "$APPDIR" "$OUTPUT"
           mkdir -p "$APPDIR"
           mkdir -p "$APPDIR/usr/bin"
@@ -87,7 +98,7 @@ jobs:
           mkdir -p "$APPDIR/usr/share/metainfo"
           mkdir -p "$APPDIR/usr/share/applications"
           mkdir -p "$APPDIR/lib"
-          
+
           cp "AppRun" "$APPDIR/"
           cp "org.starcitizen_lug.lug-helper.desktop" "$APPDIR/"
           cp "org.starcitizen_lug.lug-helper.desktop" "$APPDIR/usr/share/applications/"
@@ -102,18 +113,38 @@ jobs:
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           ln -sf "org.starcitizen_lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/org.starcitizen_lug.lug-helper.metainfo.xml"
 
-          for cmd in unzip cabextract; do
-              cp "$(command -v "$cmd")" "$APPDIR/usr/bin/"
-              chmod +x "$APPDIR/usr/bin/$cmd"
-           done
-          
-          cabextract_path="$(command -v cabextract)"
-          libmspack_path="$(ldd "$cabextract_path" | awk '/libmspack.so\.0/ {print $3}')"
-          cp "$libmspack_path" "$APPDIR/usr/lib/"
-          
+          # bundle host tools
+          for cmd in \
+              stdbuf \
+              find \
+              realpath \
+              sort \
+              tr \
+              xargs \
+              sort \
+              cut \
+              grep \
+              sed \
+              unzip \
+              cabextract \
+              curl
+          do
+              linuxdeploy \
+                --appdir "$APPDIR" \
+                --executable "$(command -v "$cmd")"
+          done
+
+
+          # Add desktop integration
+          linuxdeploy \
+            --appdir "$APPDIR" \
+            --desktop-file "$APPDIR/org.starcitizen_lug.lug-helper.desktop" \
+            --icon-file "$APPDIR/lug-helper.png"
+
+
           chmod +x "$APPDIR/AppRun"
           chmod +x "$APPDIR/lug-helper.sh"
-          
+
           ARCH="${ARCH:-x86_64}" appimagetool "$APPDIR" "$OUTPUT"
           printf "AppImage created: %s\n" "$OUTPUT"
       - name: Upload artifact
