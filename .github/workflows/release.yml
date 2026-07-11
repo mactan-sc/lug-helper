@@ -115,7 +115,6 @@ jobs:
 
           # bundle host tools
           for cmd in \
-              stdbuf \
               find \
               realpath \
               sort \
@@ -134,13 +133,11 @@ jobs:
                 --executable "$(command -v "$cmd")"
           done
 
-
           # Add desktop integration
           linuxdeploy \
             --appdir "$APPDIR" \
             --desktop-file "$APPDIR/org.starcitizen_lug.lug-helper.desktop" \
             --icon-file "$APPDIR/lug-helper.png"
-
 
           chmod +x "$APPDIR/AppRun"
           chmod +x "$APPDIR/lug-helper.sh"
