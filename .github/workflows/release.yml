@@ -130,7 +130,8 @@ jobs:
           do
               linuxdeploy \
                 --appdir "$APPDIR" \
-                --executable "$(command -v "$cmd")"
+                --executable "$(command -v "$cmd")" \
+                --exclude-library="libpcre2*"
           done
 
           # Add desktop integration
@@ -138,6 +139,8 @@ jobs:
             --appdir "$APPDIR" \
             --desktop-file "$APPDIR/org.starcitizen_lug.lug-helper.desktop" \
             --icon-file "$APPDIR/lug-helper.png"
+
+          find "$APPDIR/usr/lib" -maxdepth 1 -name 'libpcre2*.so*' -delete
 
           chmod +x "$APPDIR/AppRun"
           chmod +x "$APPDIR/lug-helper.sh"
