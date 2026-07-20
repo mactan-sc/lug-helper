@@ -58,6 +58,8 @@ jobs:
           HERE="$(cd "$(dirname "$0")" && pwd -P)"
           export PATH="$HERE/usr/bin:$PATH"
           export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
+          export SSL_CERT_FILE="$HERE/etc/ssl/certs/ca-certificates.crt"
+          export CURL_CA_BUNDLE="$HERE/etc/ssl/certs/ca-certificates.crt"
           exec "$HERE/lug-helper.sh" "$@"
           EOF
 
@@ -106,6 +108,7 @@ jobs:
           mkdir -p "$APPDIR/usr/share/metainfo"
           mkdir -p "$APPDIR/usr/share/applications"
           mkdir -p "$APPDIR/lib"
+          mkdir -p "$APPDIR/etc/ssl/certs"
 
           cp "AppRun" "$APPDIR/"
           cp "org.starcitizen_lug.lug-helper.desktop" "$APPDIR/"
@@ -117,6 +120,7 @@ jobs:
           cp "org.starcitizen_lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/"
           cp "rsi-launcher.png" "$APPDIR/rsi-launcher.png"
           cp "starcitizen.png" "$APPDIR/starcitizen.png"
+          cp /etc/ssl/certs/ca-certificates.crt "$APPDIR/etc/ssl/certs/"
 
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           ln -sf "org.starcitizen_lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/org.starcitizen_lug.lug-helper.metainfo.xml"
@@ -134,7 +138,8 @@ jobs:
               sed \
               unzip \
               cabextract \
-              curl
+              curl \
+              wget
           do
               linuxdeploy \
                 --appdir "$APPDIR" \
