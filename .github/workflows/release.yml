@@ -16,7 +16,7 @@ jobs:
     with:
       tag: ${{ github.ref_name }}
     permissions:
-      contents: read
+      contents: write
 
   release:
     name: Release
