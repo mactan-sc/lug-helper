@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     name: Build
-    runs-on: ubuntu-26.04
+    runs-on: ubuntu-24.04
     outputs:
       artifact-name: ${{ steps.artifact.outputs.name }}
     steps:
@@ -35,7 +35,10 @@ jobs:
       - name: Prepare dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cabextract unzip curl libappimage-dev libfuse3-3 libmspack0 zenity
+          sudo apt-get install -y cabextract unzip curl libappimage-dev libfuse3-3 libmspack0 \
+            meson ninja-build libgtk-4-dev libadwaita-1-dev gettext \
+            libnotify-dev libwebkitgtk-6.0-dev help2man itstool yelp-tools \
+            adwaita-icon-theme
 
           sudo wget -q \
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
@@ -49,6 +52,16 @@ jobs:
             /usr/local/bin/appimagetool \
             /usr/local/bin/linuxdeploy
 
+      - name: Build zenity from source
+        run: |
+          git clone --depth 1 https://gitlab.gnome.org/GNOME/zenity.git /tmp/zenity
+          cd /tmp/zenity
+          meson setup _build --prefix=/usr/local --buildtype=release
+          ninja -C _build
+          sudo ninja -C _build install
+          rm -rf /tmp/zenity
+          echo "zenity version: $(zenity --version)"
+
       - name: Build AppImage
         run: |
           cat > AppRun <<'EOF'
@@ -58,6 +71,8 @@ jobs:
           HERE="$(cd "$(dirname "$0")" && pwd -P)"
           export PATH="$HERE/usr/bin:$PATH"
           export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/lib:${LD_LIBRARY_PATH:-}"
+          export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+          export GSETTINGS_SCHEMA_DIR="$HERE/usr/share/glib-2.0/schemas:${GSETTINGS_SCHEMA_DIR:-}"
           exec "$HERE/lug-helper.sh" "$@"
           EOF
 
@@ -120,6 +135,15 @@ jobs:
 
           ln -sf "lug-helper.png" "$APPDIR/.DirIcon"
           ln -sf "org.starcitizen_lug.lug-helper.appdata.xml" "$APPDIR/usr/share/metainfo/org.starcitizen_lug.lug-helper.metainfo.xml"
+
+          # Bundle Adwaita icons and GLib schemas for GTK4/libadwaita theming
+          # (theme CSS is embedded in libadwaita, but icons + schemas are needed)
+          mkdir -p "$APPDIR/usr/share/icons"
+          cp -r /usr/share/icons/Adwaita "$APPDIR/usr/share/icons/"
+
+          mkdir -p "$APPDIR/usr/share/glib-2.0/schemas"
+          cp /usr/share/glib-2.0/schemas/*.gschema.xml "$APPDIR/usr/share/glib-2.0/schemas/"
+          glib-compile-schemas "$APPDIR/usr/share/glib-2.0/schemas"
 
           # bundle host tools
           for cmd in \
